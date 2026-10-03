@@ -37,12 +37,12 @@ Kryteria Huawei: oryginalność 20%, użyteczność 20%, wykonanie techniczne 20
 | Apka | React Native **0.77.1** + RNOH **0.77.75** (`@react-native-oh/react-native-harmony`, `@react-native-oh/react-native-harmony-cli`). Jeden kod na Androida i HarmonyOS |
 | Funkcje systemowe | Moduły natywne (TurboModules): ArkTS na HarmonyOS, Kotlin na Androidzie |
 | Wersje SDK HarmonyOS | `compatibleSdkVersion` = `6.0.0(20)` (minimum wymagane przez Huawei, nie obniżać), kompilacja i cel API 24 (`6.1.1(24)`), emulator z najnowszym obrazem |
-| Plan B dla RNOH | Jeśli do soboty 23:00 „hello world” z RN nie działa na emulatorze HarmonyOS: apka Huawei w ArkTS, Android zostaje w RN. Decyzję podejmujemy razem |
+| Plan B dla RNOH | Jeśli do soboty 23:00 „hello world” z RN nie działa na emulatorze HarmonyOS: apka Huawei w ArkTS, Android zostaje w RN. Decyzję podejmujemy razem. **3.10, 22:33: GO dla RNOH** (hello world działa na emulatorze API 24, .hap ma min. API 20 i cel API 24, Android też się buduje), plan B nieaktywny |
 | Backend | Python, FastAPI, WebSockety |
-| Mowa na tekst | Whisper large-v3-turbo (whisper.cpp), na Macu natywnie. Język wymuszony z ustawień seniora (PL albo EN) |
-| Ocena ryzyka | **basal-1.0-4.5B** (`Remek/basal-1.0-4.5B`, polski model decyzyjny na bazie Bielika, Apache 2.0) + reguły słów kluczowych. Clef-Flash (`Cloudflare/clef-flash`) do porównania, głównie po angielsku. Zapas na CPU: embeddingi `PKOBP/embed-modernbert-68m` + regresja logistyczna |
-| Telefonia | Twilio, dwukierunkowe Media Streams (`<Connect><Stream>`). Polski numer: Zadarma (przekierowanie na SIP → Twilio SIP Domain) albo numer Twilio PL; numer z USA tylko awaryjnie |
-| Testy połączeń w trakcie budowy | Z przeglądarki (Twilio Voice JS SDK), żeby nie płacić operatorowi; z telefonu tylko test przekierowania i demo |
+| Mowa na tekst | Whisper large-v3-turbo (whisper.cpp, `whisper-server` z Homebrew, Metal), na Macu natywnie, ok. 0,5 s na kawałek. Kawałki 3–8 s cięte po pauzach. Język wymuszony z ustawień seniora (PL albo EN) |
+| Ocena ryzyka | **basal-1.0-4.5B** (`Remek/basal-1.0-4.5B`, polski model decyzyjny na bazie Bielika, Apache 2.0) + reguły słów kluczowych. Lżejszy zapas: `basal-1.0-1.5B` (to samo API, ok. 3 razy szybszy). Clef-Flash (`Cloudflare/clef-flash`, 19 GB) do porównania, głównie po angielsku, pobieramy dopiero, jeśli starczy czasu (łącze to hotspot). Zapas na CPU: embeddingi `PKOBP/embed-modernbert-68m` + regresja logistyczna |
+| Telefonia | Twilio, dwukierunkowe Media Streams (`<Connect><Stream>`; na koncie próbnym `<Stream>` jest zablokowany). Polski numer: Zadarma (przekierowanie na SIP → Twilio SIP Domain) albo numer Twilio PL; numer z USA tylko awaryjnie. Zakup konta (min. 20 USD) odkładamy do pierwszego prawdziwego telefonu; kod operatora siedzi za adapterem, tańsza alternatywa to SignalWire (cXML, ok. 5 USD, cena niesprawdzona) |
+| Testy połączeń w trakcie budowy | Z przeglądarki, przez nasze strony `/dev/caller` (dzwoniący, format Twilio Media Streams) i `/dev/senior` (zastępuje apkę), bez operatora i bez kosztów. Z telefonu tylko test przekierowania i demo |
 | Wdrożenie | docker compose. Na Macu modele działają natywnie (Docker na Macu nie daje kontenerom GPU), backend w kontenerze łączy się z nimi przez `host.docker.internal`. Na AWS jedna maszyna EC2 + Caddy z automatycznym HTTPS |
 | Języki | PL i EN wszędzie: UI, komunikaty głosowe, rozpoznawanie mowy, reguły, scenariusze testowe |
 
@@ -74,7 +74,7 @@ Uprawnienia tylko te potrzebne: mikrofon, internet, odczyt kontaktów, powiadomi
 
 ### Ocena ryzyka (basal-1)
 
-`basal-serve` wystawia `POST /v1/systemone` (repo: https://github.com/rkinas/basal). Szybkie tryby wymagają karty Nvidia; na Macu zostaje `--mode eager` (zwykły PyTorch). **Pierwsze zadanie po stronie AI: zmierzyć czas jednej decyzji na Macu.** Oceniamy co 3–4 s, więc ok. 1 s wystarczy.
+`basal-serve` wystawia `POST /v1/systemone` (repo: https://github.com/rkinas/basal). Na Macu działa tryb `--mode mps` (GPU Apple) z naszą łatką `--share-state` (wszystkie pytania w jednym przebiegu, ok. 2,2 razy szybciej; `server/bench/basal/basal-share-state.patch`). Zmierzone na M4 Pro (szczegóły w `server/bench/README.md`): samo `risk` 0,76 s, `risk` + `scam_type` 1,07 s, 6 pytań 1,94 s, ok. 10 GB pamięci. Dlatego co 3–4 s pytamy tylko o `risk` (z `scam_type`), a pełne 6 pytań liczymy raz, po ostrzeżeniu, do streszczenia alertu. Serwery modeli uruchamiamy skryptami `server/bench/run-whisper.sh` i `run-basal.sh` (słuchają na 127.0.0.1). Przy starcie backend wysyła zapytanie rozgrzewające; timeout 3 s.
 
 Szkic schematu (do dopracowania razem z nami):
 
@@ -94,7 +94,7 @@ Szkic schematu (do dopracowania razem z nami):
 }
 ```
 
-Progi wstępne: od 50/100 ostrzeżenie, od 80 hasło rodzinne i rozłączenie. Wynik wygładzamy (np. średnia ruchoma albo dwa kolejne odczyty), żeby jedno słowo nie rozłączało rozmowy. Reguły (PL i EN: BLIK, przelew, gotówka, „nikomu nie mów”, policja, prokurator…) to bezpiecznik, gdy model się pomyli. Obsłuż: timeout modelu, błąd HTTP, dziwną odpowiedź. Wtedy działają same reguły, a w logach jest ślad.
+Wynik modelu: `100·(1−P(low))` z pytania `risk` (model prawie nigdy nie wybiera „critical”, więc oczekiwany poziom nie przekracza ok. 65). Progi (decyzja 3.10, do strojenia na `scenarios/`): ostrzeżenie przy ≥50 dwa odczyty z rzędu; hasło rodzinne i rozłączenie przy ≥90 dwa odczyty z rzędu **oraz** (`secrecy` ≥0,8 albo trafienie reguły). Łączenie z regułami: max(model, reguły). Wygładzanie jest konieczne: zwykła rozmowa o pożyczce dla syna skoczyła na jeden odczyt do 58. Whisper zapisuje kwoty cyframi („30 tysięcy”, „200 zł”), więc reguły łapią też cyfry. Reguły (PL i EN: BLIK, przelew, gotówka, „nikomu nie mów”, policja, prokurator…) to bezpiecznik, gdy model się pomyli. Obsłuż: timeout modelu, błąd HTTP, dziwną odpowiedź. Wtedy działają same reguły, a w logach jest ślad.
 
 Ewaluacja: kilkaset syntetycznych rozmów w `scenarios/` (oszustwa i zwykłe rozmowy, także o pieniądzach w rodzinie, PL i EN). Porównujemy basal, Clef-Flash i same reguły: precyzja, czułość, macierz pomyłek, wyniki w README.
 
@@ -127,14 +127,19 @@ AI_WORKFLOW.md
 
 ## Środowisko na Macu (Apple Silicon, 48 GB RAM)
 
-- W `~/Downloads`: `devecostudio-mac-arm-6.1.1.280.zip` (DevEco Studio) i `commandline-tools-mac-arm64-6.1.1.280.zip` (narzędzia CLI: m.in. ohpm, hvigorw, hdc). Po rozpakowaniu sprawdź, co jest w środku, i podaj nam dokładne ścieżki do PATH.
-- DevEco Studio: po pierwszym uruchomieniu zamknij je i ustaw region na Chiny, bo inaczej emulator ma tylko zegarki: `~/Library/Application Support/Huawei/DevEcoStudio6.1/options/country.region.xml` → `<countryregion name="CN"/>`.
-- Emulator tworzymy sami w GUI (Device Manager → Phone → najnowszy obraz). Ty z niego korzystasz przez `hdc`.
+- DevEco Studio 6.1.1.280 jest w `/Applications/DevEco-Studio.app` (wbudowane SDK HarmonyOS 6.1.1, API 24). Narzędzia CLI 6.1.1.280 rozpakowane w `~/command-line-tools` (to samo SDK, na tym Macu duplikat). Ścieżki do PATH:
+  `export DEVECO_SDK_HOME="/Applications/DevEco-Studio.app/Contents/sdk"`
+  `export PATH="$DEVECO_SDK_HOME/default/openharmony/toolchains:/Applications/DevEco-Studio.app/Contents/tools/ohpm/bin:/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin:$PATH"`
+- Łącze to hotspot z telefonu: unikaj dużych pobrań bez pytania.
+- DevEco Studio: po pierwszym uruchomieniu zamknij je i ustaw region na Chiny, bo inaczej emulator ma tylko zegarki: `~/Library/Application Support/Huawei/DevEcoStudio6.1/options/country.region.xml` → `<countryregion name="CN"/>` (zrobione 3.10).
+- Emulator tworzymy sami w GUI (Device Manager → Phone → najnowszy obraz). Ty z niego korzystasz przez `hdc`. Jest: Pura 90, HarmonyOS 6.1.1 (API 24), `hdc` widzi go jako `127.0.0.1:5555`. Niepodpisany debug HAP instaluje się na emulatorze bez konta. Audio na emulatorze: nagrywanie działa ze źródłem `SOURCE_TYPE_MIC` (tryb `VOICE_COMMUNICATION` się zacina), odtwarzanie idzie na głośnik. Testy z dźwiękiem albo wymagające kliknięć zapowiadaj nam wcześniej (co robimy, na co patrzymy) i nie puszczaj głośnych tonów na sali.
 - Debug build z DevEco działa bez konta. Do podpisanego .hap na zgłoszenie potrzebne jest konto Huawei Developer.
-- Node 22+. Na Androida potrzebne Android SDK; zapytaj, czy jest zainstalowane.
+- Node: domyślny `node` to v26, ale `app/` budujemy na Node 22 (`/opt/homebrew/opt/node@22/bin`, `app/.nvmrc`). Android SDK jest w `~/Library/Android/sdk`; do Gradle używaj `JAVA_HOME=/opt/homebrew/opt/openjdk@21` (Java 25 z Android Studio jest za nowa dla RN 0.77). Python w backendzie: 3.12 przez `uv`.
 - W `.claude/skills/` są skille od Huawei (ArkTS, ArkUI, praca z aplikacją). Nie commitujemy ich, bo repo Huawei nie ma licencji (są w `.gitignore`); źródło: https://github.com/onirodeveloper/hackyeah2026-challenge. Część z nich zakłada `devecocli` (`@deveco/deveco-cli` 1.3.4, Node 22+). Instalator Huawei był tylko na Windows, więc na Macu sprawdź, czy da się go zainstalować, zanim na nim oprzesz pracę.
 
 ### Start projektu RN na HarmonyOS (zweryfikuj z dokumentacją RNOH 0.77)
+
+Zrobione 3.10. Sprawdzone komendy (bundle, build HAP z CLI, instalacja, Metro, build Androida) i znane problemy RNOH 0.77.75 są w `app/README.md`. Ścieżka do repo musi być krótka (hvigor/pnpm: `ENAMETOOLONG`). Poniżej pierwotny plan.
 
 1. `npx @react-native-community/cli init Sprawdzam --version 0.77.1` (potem przenieś do `app/` albo użyj odpowiedniej opcji katalogu).
 2. `npm i --save-exact @react-native-oh/react-native-harmony@0.77.75 @react-native-oh/react-native-harmony-cli@0.77.75`
@@ -189,7 +194,7 @@ Na początku każdej sesji przeczytaj `AI_WORKFLOW.md` i dopisz nowe narzędzia 
 - Commituj często, małymi działającymi krokami, z opisowymi wiadomościami po angielsku.
 - Ryzykowne rzeczy rób na osobnych gałęziach. Gałąź `main` ma się zawsze budować. Scalanie do `main` zostaw nam.
 
-## Pierwsza sesja
+## Pierwsza sesja (zrobione 3.10)
 
 1. Przeczytaj ten plik, `reference/challenges/huawei_challenge.md`, `reference/hackathon-resources/emulator-capability-comparison.md` i `AI_WORKFLOW.md`. Dopisz Claude Code z wersją do tabeli narzędzi.
 2. Sprawdź środowisko: `node -v`, `python3 --version`, `git`, `brew`, `uv`, Android SDK, DevEco Studio w `/Applications`, zawartość obu ZIP-ów z `~/Downloads`.
