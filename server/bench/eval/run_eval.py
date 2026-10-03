@@ -220,9 +220,12 @@ def build_systems(calls, view):
             if rows is None:
                 continue
             row = rows.get(c["id"])
-            if row is None or "error" in row:
-                errors[n] += 1
-                continue  # model missing/failed: production would fall back to rules only
+            if row is None:
+                errors[f"{n} missing"] += 1
+                continue
+            if "error" in row:
+                errors[f"{n} request error"] += 1
+                continue  # model failed: production would fall back to rules only; excluded from model metrics
             s = round(100 * (1 - row["p_risk"]["low"]))
             entry[n] = {"score": s, "type": row["scam_type"], "p_risk": row["p_risk"]}
             latency[n].append(row["latency_s"])
@@ -292,7 +295,7 @@ def progressive_report(calls_by_id, name, view):
         per_call[r["id"]] = (c, r["series"], seq)
     for system in ("rules", name, "combo"):
         for mode in ("single", "avg2", "2row"):
-            scam_warn, scam_hang, norm_warn, norm_hang, t_warn, turn_warn, frac_warn = 0, 0, 0, 0, [], [], []
+            scam_warn, scam_hang, norm_warn, norm_hang, t_warn, turn_warn, frac_warn, t_hang = 0, 0, 0, 0, [], [], [], []
             fails, fps = [], []
             n_s = n_n = 0
             for cid, (c, series, seq) in per_call.items():
@@ -308,6 +311,8 @@ def progressive_report(calls_by_id, name, view):
                     else:
                         fails.append(cid)
                     scam_hang += h is not None
+                    if h is not None:
+                        t_hang.append(series[h]["words"] / WORDS_PER_S)
                 else:
                     n_n += 1
                     if w is not None:
@@ -318,7 +323,7 @@ def progressive_report(calls_by_id, name, view):
                 "scams": n_s, "scams_warned": scam_warn, "scams_hung_up": scam_hang, "normals": n_n,
                 "normals_false_warn": norm_warn, "normals_false_hangup": norm_hang,
                 "time_to_warn_s_median": statistics.median(t_warn) if t_warn else None,
-                "time_to_warn_s_p90": pct(t_warn, 90), "readings_to_warn_median": statistics.median(turn_warn) if turn_warn else None,
+                "time_to_warn_s_p90": pct(t_warn, 90), "time_to_hangup_s_median": statistics.median(t_hang) if t_hang else None, "readings_to_warn_median": statistics.median(turn_warn) if turn_warn else None,
                 "share_of_call_elapsed_at_warn_median": statistics.median(frac_warn) if frac_warn else None,
                 "scams_never_warned": fails, "normals_warned": fps}
     return out
@@ -338,7 +343,7 @@ def cmd_report(a):
         v = {"systems": {}, "model_errors": dict(errors)}
         md.append(f"\n## View: `{view}` ({'both speakers' if view == 'full' else 'caller turns only'})\n")
         if errors:
-            md.append(f"Model request errors (counted as missing, i.e. rules only): {dict(errors)}\n")
+            md.append(f"Calls without a model reading (excluded from that system's metrics): {dict(errors)}\n")
         md.append("| system | n | warn ≥50: precision | recall | F1 | FPR | TP/FP/FN/TN | hang-up ≥90: precision | recall | FPR | TP/FP/FN/TN | ROC AUC | scam_type acc. (scams) | (all calls) |")
         md.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
         for s in systems:
@@ -359,6 +364,27 @@ def cmd_report(a):
             v["systems"][s]["hangup_with_rule_guard"] = m
             md.append(f"\nHang-up guard for `{s}` (score ≥ 90 **and** at least one keyword-rule category matched): precision {f3(m['precision'])}, "
                       f"recall {f3(m['recall'])}, FPR {f3(m['fpr'])}, TP/FP/FN/TN {m['tp']}/{m['fp']}/{m['fn']}/{m['tn']}.")
+        # alternative action policies for the production combination (whole-transcript, single reading)
+        if "basal-4.5B" in systems:
+            ids = [c for c in calls if "basal-4.5B" in per_call[c["id"]]]
+            y = [c["label"] == "scam" for c in ids]
+            mod = [per_call[c["id"]]["basal-4.5B"]["score"] for c in ids]
+            rul = [per_call[c["id"]]["rules"]["score"] for c in ids]
+            policies = {
+                "warn: max ≥ 50 (production)": [max(m, r) >= WARN for m, r in zip(mod, rul)],
+                "warn: model ≥ 50 or rules ≥ 80": [m >= WARN or r >= 80 for m, r in zip(mod, rul)],
+                "hang-up: max ≥ 90 (production)": [max(m, r) >= HANGUP for m, r in zip(mod, rul)],
+                "hang-up: model ≥ 90 (rules can only warn)": [m >= HANGUP for m in mod],
+                "hang-up: max ≥ 90 and model ≥ 50": [max(m, r) >= HANGUP and m >= WARN for m, r in zip(mod, rul)],
+            }
+            md.append("\n**Action policies, basal-4.5B + rules** (single whole-transcript reading; exploratory, same data):\n")
+            md.append("| policy | precision | recall | FPR | TP/FP/FN/TN |")
+            md.append("|---|---|---|---|---|")
+            v["policies"] = {}
+            for name, pred in policies.items():
+                m = confusion(y, pred)
+                v["policies"][name] = m
+                md.append(f"| {name} | {f3(m['precision'])} | {f3(m['recall'])} | {f3(m['fpr'])} | {m['tp']}/{m['fp']}/{m['fn']}/{m['tn']} |")
         # breakdowns at warn
         md.append("\n**Breakdown at warn ≥ 50** (recall on scams / false-positive rate on normal calls):\n")
         groups = [("lang", "pl"), ("lang", "en"), ("difficulty", "easy"), ("difficulty", "hard"), ("source", "handwritten")]
@@ -464,14 +490,17 @@ def cmd_report(a):
             summary["progressive"][f"{name}|{view}"] = pr
             md.append(f"\n## Turn-by-turn replay: `{name}`, view `{view}` ({pr['n_calls']} calls, {pr['n_readings']} readings, "
                       f"risk-only latency p50 {pr['latency_p50_s']:.2f} s, p95 {pr['latency_p95_s']:.2f} s)\n")
+            md.append("Subset: 8 calls per language × label × difficulty (32 scams; 32 normal calls = 16 plain chats + 16 hard negatives), "
+                      "seed 2026. State after each turn = all turns so far (≈ the 60 s window); time = words so far / 2.5 words per s. "
+                      "Latency measured while other replays ran on the same GPU.\n")
             md.append("Smoothing: `single` = one reading; `avg2` = server ScoreSmoother (warn when the mean of the last 2 readings ≥ 50, "
                       "hang-up when the last 2 are both ≥ 90); `2row` = warn only when 2 consecutive readings ≥ 50.\n")
-            md.append("| system | smoothing | scams warned | median time to warn (s) | p90 (s) | median share of call elapsed | scams hung up | normals falsely warned | normals falsely hung up |")
-            md.append("|---|---|---|---|---|---|---|---|---|")
+            md.append("| system | smoothing | scams warned | median time to warn (s) | p90 (s) | median share of call elapsed | scams hung up | median time to hang-up (s) | normals falsely warned | normals falsely hung up |")
+            md.append("|---|---|---|---|---|---|---|---|---|---|")
             for key, m in pr["systems"].items():
                 sysn, mode = key.split("|")
                 md.append(f"| {sysn} | {mode} | {m['scams_warned']}/{m['scams']} | {f3(m['time_to_warn_s_median'])} | {f3(m['time_to_warn_s_p90'])} | "
-                          f"{f3(m['share_of_call_elapsed_at_warn_median'])} | {m['scams_hung_up']}/{m['scams']} | {m['normals_false_warn']}/{m['normals']} | "
+                          f"{f3(m['share_of_call_elapsed_at_warn_median'])} | {m['scams_hung_up']}/{m['scams']} | {f3(m['time_to_hangup_s_median'])} | {m['normals_false_warn']}/{m['normals']} | "
                           f"{m['normals_false_hangup']}/{m['normals']} |")
             for key in (f"combo|avg2", f"combo|2row"):
                 m = pr["systems"][key]
