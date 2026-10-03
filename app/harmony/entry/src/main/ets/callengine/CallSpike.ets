@@ -1,16 +1,18 @@
 /**
  * Native self-test of the call path without the JS layer (debug only):
  *   hdc shell aa start -a EntryAbility -b pl.sprawdzam.app --ps spike call \
- *     [--ps url ws://127.0.0.1:8000/app/control] [--ps secs 12]
- * Connects the control socket, auto-accepts the first incoming call, logs every event and hangs up
- * after `secs`. Use with a SILENT fake backend (zero PCM frames); caller audio is played on the speaker.
+ *     [--ps url ws://127.0.0.1:8765/app/control] [--ps token dev-device-1] [--ps secs 12] \
+ *     [--ps ring 2] [--ps mode accept|reject|ignore] [--ps dtmf 1234]
+ * Connects the control socket and handles the first incoming call: after `ring` seconds of ringing it accepts
+ * (and hangs up after `secs`), rejects, or ignores it (backend timeout). On verify_password it sends `dtmf`.
+ * Use with a SILENT fake backend (zero PCM frames); caller audio is played on the speaker.
  * Logs: hdc hilog | grep CallEngine
  */
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Want } from '@kit.AbilityKit';
-import { CallListener, CallSession } from './CallSession';
-import { ControlChannel, ControlListener } from './ControlChannel';
+import { CallEngineCore, CallEngineListener } from './CallEngineCore';
 import {
+  CallActiveEvent,
   CallEndedEvent,
   ErrorEvent,
   IncomingCallEvent,
@@ -24,36 +26,50 @@ const TAG: string = 'CallEngine';
 
 export interface CallSpikeOptions {
   url: string;
+  token: string;
   secs: number;
+  ring: number;
+  mode: string;
+  dtmf: string;
+}
+
+function param(want: Want, key: string, fallback: string): string {
+  if (want.parameters === undefined) {
+    return fallback;
+  }
+  const value = want.parameters[key];
+  return value === undefined || value === null ? fallback : String(value);
 }
 
 export function callSpikeOptionsFromWant(want: Want): CallSpikeOptions | null {
-  const params = want.parameters;
-  if (params === undefined || params['spike'] !== 'call') {
+  if (param(want, 'spike', '') !== 'call') {
     return null;
   }
-  const url = params['url'];
-  const secs = params['secs'];
   const opts: CallSpikeOptions = {
-    url: url === undefined ? 'ws://127.0.0.1:8000/app/control' : String(url),
-    secs: secs === undefined ? 12 : Number.parseFloat(String(secs))
+    url: param(want, 'url', 'ws://127.0.0.1:8765/app/control'),
+    token: param(want, 'token', 'dev-device-1'),
+    secs: Number.parseFloat(param(want, 'secs', '12')),
+    ring: Number.parseFloat(param(want, 'ring', '2')),
+    mode: param(want, 'mode', 'accept'),
+    dtmf: param(want, 'dtmf', '1234')
   };
   return opts;
 }
 
-class CallSpike implements ControlListener, CallListener {
+class CallSpike implements CallEngineListener {
   private opts: CallSpikeOptions;
-  private control: ControlChannel;
-  private session: CallSession | null = null;
+  private core: CallEngineCore;
+  private handled: boolean = false;
 
   constructor(opts: CallSpikeOptions) {
     this.opts = opts;
-    this.control = new ControlChannel(this);
+    this.core = new CallEngineCore(this);
   }
 
   start(): void {
-    hilog.info(DOMAIN, TAG, 'spike: start url=%{public}s secs=%{public}d', this.opts.url, this.opts.secs);
-    this.control.connect(this.opts.url, 'spike-device');
+    hilog.info(DOMAIN, TAG, 'spike: start url=%{public}s mode=%{public}s ring=%{public}d secs=%{public}d',
+      this.opts.url, this.opts.mode, this.opts.ring, this.opts.secs);
+    this.core.connectControl(this.opts.url, this.opts.token);
   }
 
   onProtectionStatus(event: ProtectionStatusEvent): void {
@@ -62,22 +78,32 @@ class CallSpike implements ControlListener, CallListener {
   }
 
   onIncomingCall(event: IncomingCallEvent): void {
-    hilog.info(DOMAIN, TAG, 'spike: incoming %{public}s caller=%{public}s url=%{public}s', event.callId, event.caller,
-      event.callUrl);
-    if (this.session !== null) {
+    hilog.info(DOMAIN, TAG, 'spike: incoming %{public}s caller=%{public}s lang=%{public}s', event.callId,
+      event.caller, event.lang);
+    if (this.handled) {
       return;
     }
-    const session = new CallSession(event.callUrl, this);
-    this.session = session;
-    session.open().then(() => {
-      hilog.info(DOMAIN, TAG, 'spike: call active, hanging up in %{public}d s', this.opts.secs);
-      setTimeout(() => {
-        session.hangup().then(() => this.control.disconnect());
-      }, this.opts.secs * 1000);
-    }).catch((e: Error) => {
-      hilog.error(DOMAIN, TAG, 'spike: accept failed %{public}s', e.message);
-      this.control.disconnect();
-    });
+    this.handled = true;
+    if (this.opts.mode === 'ignore') {
+      return;
+    }
+    setTimeout(() => {
+      if (this.opts.mode === 'reject') {
+        hilog.info(DOMAIN, TAG, 'spike: rejecting');
+        this.core.hangup();
+        return;
+      }
+      this.core.acceptCall(event.callId).then(() => {
+        hilog.info(DOMAIN, TAG, 'spike: accepted, hanging up in %{public}d s', this.opts.secs);
+        setTimeout(() => this.core.hangup(), this.opts.secs * 1000);
+      }).catch((e: Error) => {
+        hilog.error(DOMAIN, TAG, 'spike: accept failed %{public}s', e.message);
+      });
+    }, this.opts.ring * 1000);
+  }
+
+  onCallActive(event: CallActiveEvent): void {
+    hilog.info(DOMAIN, TAG, 'spike: call active %{public}s', event.callId);
   }
 
   onRisk(event: RiskEvent): void {
@@ -86,14 +112,17 @@ class CallSpike implements ControlListener, CallListener {
   }
 
   onVerifyPassword(event: VerifyPasswordEvent): void {
-    hilog.info(DOMAIN, TAG, 'spike: verify_password -> sending dtmf 1234');
-    if (this.session !== null) {
-      this.session.sendDtmf('1234');
+    hilog.info(DOMAIN, TAG, 'spike: verify_password -> sending dtmf (%{public}d digits)', this.opts.dtmf.length);
+    try {
+      this.core.sendDtmf(this.opts.dtmf);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'spike: dtmf failed %{public}s', (e as Error).message);
     }
   }
 
   onCallEnded(event: CallEndedEvent): void {
     hilog.info(DOMAIN, TAG, 'spike: call ended %{public}s reason=%{public}s', event.callId, event.reason);
+    setTimeout(() => this.core.disconnectControl(), 500);
   }
 
   onError(event: ErrorEvent): void {

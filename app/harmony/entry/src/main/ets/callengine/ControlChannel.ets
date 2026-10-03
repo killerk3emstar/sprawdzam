@@ -1,17 +1,20 @@
 /**
- * Control WebSocket: receives incoming-call notifications and protection status, keeps the connection
- * alive with ping/pong and reconnects with exponential backoff. While disconnected the app reports
- * "protection unavailable" (calls are not blocked: fail-open).
+ * Control WebSocket (APP_PROTOCOL.md section 1): receives incoming-call notifications and protection status,
+ * pings every 15 s and reconnects with backoff 1 s, 2 s, 5 s, then every 10 s. Any close (1000, 1008, the
+ * 4000 idle close, network errors) leads to a reconnect while protection is wanted. While disconnected the app
+ * reports "protection unavailable".
  */
 import { webSocket } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   callUrlFromControlUrl,
+  CLOSE_IDLE,
+  CLOSE_POLICY,
   decode,
   encode,
   ErrorEvent,
-  IncomingCallEvent,
+  IncomingCallInfo,
   ProtectionStatusEvent,
   ServerMessage
 } from './Protocol';
@@ -19,11 +22,10 @@ import {
 const DOMAIN: number = 0x5350;
 const TAG: string = 'CallEngine';
 const PING_INTERVAL_MS: number = 15000;
-const RECONNECT_MIN_MS: number = 1000;
-const RECONNECT_MAX_MS: number = 30000;
+const BACKOFF_MS: number[] = [1000, 2000, 5000, 10000];
 
 export interface ControlListener {
-  onIncomingCall(event: IncomingCallEvent): void;
+  onIncomingCall(info: IncomingCallInfo): void;
   onProtectionStatus(event: ProtectionStatusEvent): void;
   onError(event: ErrorEvent): void;
 }
@@ -38,11 +40,15 @@ export class ControlChannel {
   private serverAvailable: boolean = false;
   private pingTimer: number = -1;
   private reconnectTimer: number = -1;
-  private reconnectDelay: number = RECONNECT_MIN_MS;
+  private attempt: number = 0;
   private generation: number = 0;
 
   constructor(listener: ControlListener) {
     this.listener = listener;
+  }
+
+  get isConnected(): boolean {
+    return this.connected;
   }
 
   connect(url: string, deviceToken: string): void {
@@ -51,7 +57,7 @@ export class ControlChannel {
     const sep = url.indexOf('?') >= 0 ? '&' : '?';
     this.fullUrl = `${url}${sep}device_token=${encodeURIComponent(deviceToken)}`;
     this.wanted = true;
-    this.reconnectDelay = RECONNECT_MIN_MS;
+    this.attempt = 0;
     this.open();
   }
 
@@ -60,6 +66,18 @@ export class ControlChannel {
     this.clearTimers();
     this.closeSocket();
     this.setStatus(false, this.serverAvailable);
+  }
+
+  /** Sends a JSON text frame on the control channel. Returns false when the channel is not open. */
+  sendText(text: string): boolean {
+    const ws = this.ws;
+    if (ws === null || !this.connected) {
+      return false;
+    }
+    ws.send(text).catch((err: BusinessError) => {
+      hilog.warn(DOMAIN, TAG, 'control: send failed: %{public}s', err.message);
+    });
+    return true;
   }
 
   private open(): void {
@@ -74,11 +92,11 @@ export class ControlChannel {
         return;
       }
       if (err) {
-        this.onSocketLost(`open failed: ${err.code} ${err.message}`);
+        this.onSocketLost(`open failed: ${err.code} ${err.message}`, -1);
         return;
       }
       hilog.info(DOMAIN, TAG, 'control: connected');
-      this.reconnectDelay = RECONNECT_MIN_MS;
+      // The backoff resets on the first valid message, not on open: a rejected token (1008) also opens first.
       this.setStatus(true, this.serverAvailable);
       this.startPing();
     });
@@ -92,17 +110,18 @@ export class ControlChannel {
       if (generation !== this.generation) {
         return;
       }
-      this.onSocketLost(`closed: ${value ? value.code : -1} ${value ? value.reason : ''}`);
+      const code = value ? value.code : -1;
+      this.onSocketLost(`closed: ${code} ${value ? value.reason : ''}`, code);
     });
     ws.on('error', (err: BusinessError) => {
       if (generation !== this.generation) {
         return;
       }
-      this.onSocketLost(`error: ${err.code} ${err.message}`);
+      this.onSocketLost(`error: ${err.code} ${err.message}`, -1);
     });
     ws.connect(this.fullUrl).catch((err: BusinessError) => {
       if (generation === this.generation) {
-        this.onSocketLost(`connect failed: ${err.code} ${err.message}`);
+        this.onSocketLost(`connect failed: ${err.code} ${err.message}`, -1);
       }
     });
   }
@@ -113,6 +132,7 @@ export class ControlChannel {
       hilog.warn(DOMAIN, TAG, 'control: ignoring malformed message');
       return;
     }
+    this.attempt = 0;
     switch (msg.type) {
       case 'incoming_call': {
         const callId = msg.callId ?? '';
@@ -121,15 +141,14 @@ export class ControlChannel {
           this.listener.onError({ code: 'protocol', message: 'incoming_call without callId/token' });
           return;
         }
-        const event: IncomingCallEvent = {
+        const info: IncomingCallInfo = {
           callId: callId,
-          token: token,
-          caller: msg.caller ?? '',
+          caller: msg.caller ?? 'unknown',
           lang: msg.lang ?? 'pl',
           callUrl: callUrlFromControlUrl(this.url, callId, token)
         };
         hilog.info(DOMAIN, TAG, 'control: incoming call %{public}s', callId);
-        this.listener.onIncomingCall(event);
+        this.listener.onIncomingCall(info);
         break;
       }
       case 'protection_status':
@@ -138,20 +157,27 @@ export class ControlChannel {
       case 'pong':
         break;
       default:
-        hilog.info(DOMAIN, TAG, 'control: unknown message type %{public}s', msg.type);
+        // Unknown types are ignored (forward compatibility).
+        hilog.info(DOMAIN, TAG, 'control: ignoring message type %{public}s', msg.type);
     }
   }
 
-  private onSocketLost(why: string): void {
+  private onSocketLost(why: string, closeCode: number): void {
     hilog.warn(DOMAIN, TAG, 'control: connection lost (%{public}s)', why);
+    if (closeCode === CLOSE_POLICY) {
+      this.listener.onError({ code: 'control_auth_failed', message: 'backend rejected the device token (1008)' });
+    } else if (closeCode === CLOSE_IDLE) {
+      hilog.info(DOMAIN, TAG, 'control: backend closed the idle channel (4000)');
+    }
     this.stopPing();
     this.closeSocket();
-    this.setStatus(false, this.serverAvailable);
+    // Availability is re-announced by protection_status after every reconnect.
+    this.setStatus(false, false);
     if (!this.wanted || this.reconnectTimer >= 0) {
       return;
     }
-    const delay = this.reconnectDelay;
-    this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_MAX_MS);
+    const delay = BACKOFF_MS[Math.min(this.attempt, BACKOFF_MS.length - 1)];
+    this.attempt++;
     hilog.info(DOMAIN, TAG, 'control: reconnecting in %{public}d ms', delay);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = -1;
@@ -173,12 +199,7 @@ export class ControlChannel {
   private startPing(): void {
     this.stopPing();
     this.pingTimer = setInterval(() => {
-      const ws = this.ws;
-      if (ws !== null && this.connected) {
-        ws.send(encode({ type: 'ping' })).catch((err: BusinessError) => {
-          hilog.warn(DOMAIN, TAG, 'control: ping failed %{public}s', err.message);
-        });
-      }
+      this.sendText(encode({ type: 'ping' }));
     }, PING_INTERVAL_MS);
   }
 

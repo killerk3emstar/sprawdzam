@@ -21,7 +21,7 @@ class CallEngineModule(reactContext: ReactApplicationContext) : NativeCallEngine
 
   override fun requestMicrophonePermission(promise: Promise) = notImplemented(promise)
 
-  override fun acceptCall(callUrl: String, promise: Promise) = notImplemented(promise)
+  override fun acceptCall(callId: String, promise: Promise) = notImplemented(promise)
 
   override fun hangup(promise: Promise) = notImplemented(promise)
 

@@ -26,10 +26,8 @@ const mockNative = jest.requireMock('../src/native/NativeCallEngine').default;
 
 const INCOMING = {
   callId: 'c1',
-  token: 't1',
   caller: '+48 600 000 000',
   lang: 'pl',
-  callUrl: 'ws://127.0.0.1:8000/app/call/c1?token=t1',
 };
 
 function text(renderer: ReactTestRenderer.ReactTestRenderer): string {
@@ -51,7 +49,7 @@ describe('CallEngine facade', () => {
   it('delivers native events to typed listeners and stops after remove()', () => {
     const listener = jest.fn();
     const sub = CallEngine.addListener('risk', listener);
-    const risk = {score: 88, level: 'high', scamType: 'police', reasons: ['money']};
+    const risk = {callId: 'c1', score: 88, level: 'high', scamType: 'police', reasons: ['money']};
     DeviceEventEmitter.emit(CALL_ENGINE_EVENT_NAMES.risk, risk);
     sub.remove();
     DeviceEventEmitter.emit(CALL_ENGINE_EVENT_NAMES.risk, risk);
@@ -77,10 +75,11 @@ describe('DevCallPanel', () => {
 
     await ReactTestRenderer.act(() => {
       DeviceEventEmitter.emit(CALL_ENGINE_EVENT_NAMES.risk, {
+        callId: 'c1',
         score: 62,
         level: 'warn',
         scamType: 'grandchild',
-        reasons: ['asks for money'],
+        reasons: ['money'],
       });
       DeviceEventEmitter.emit(CALL_ENGINE_EVENT_NAMES.verifyPassword, {callId: 'c1'});
     });

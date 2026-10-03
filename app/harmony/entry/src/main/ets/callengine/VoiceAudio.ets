@@ -16,8 +16,10 @@ const DOMAIN: number = 0x5350;
 const TAG: string = 'CallEngine';
 
 export const FRAME_BYTES: number = 640; // 20 ms of PCM16 mono at 16 kHz
-// Keep at most ~300 ms of caller audio queued; older frames are dropped to bound latency.
-const MAX_QUEUED_BYTES: number = FRAME_BYTES * 15;
+// Jitter buffer (APP_PROTOCOL.md: 40-100 ms): after an underrun, wait for 60 ms of caller audio before
+// playing again; keep at most 200 ms queued and drop the oldest frames beyond that to bound latency.
+const PREBUFFER_BYTES: number = FRAME_BYTES * 3;
+const MAX_QUEUED_BYTES: number = FRAME_BYTES * 10;
 const STALL_CHECK_MS: number = 1000;
 
 const STREAM_INFO: audio.AudioStreamInfo = {
@@ -40,7 +42,9 @@ export class PcmQueue {
   private frames: Uint8Array[] = [];
   private headOffset: number = 0;
   private queued: number = 0;
+  private buffering: boolean = true;
   dropped: number = 0;
+  underruns: number = 0;
 
   push(frame: Uint8Array): void {
     this.frames.push(frame);
@@ -55,6 +59,11 @@ export class PcmQueue {
 
   /** Copies queued bytes into out and zero-fills the rest. Returns bytes of real audio copied. */
   read(out: Uint8Array): number {
+    if (this.buffering && this.queued < PREBUFFER_BYTES) {
+      out.fill(0);
+      return 0;
+    }
+    this.buffering = false;
     let written = 0;
     while (written < out.byteLength && this.frames.length > 0) {
       const head = this.frames[0];
@@ -70,6 +79,8 @@ export class PcmQueue {
     }
     if (written < out.byteLength) {
       out.fill(0, written);
+      this.buffering = true;
+      this.underruns++;
     }
     return written;
   }
@@ -78,11 +89,14 @@ export class PcmQueue {
     this.frames = [];
     this.headOffset = 0;
     this.queued = 0;
+    this.buffering = true;
   }
 }
 
 export type FrameListener = (frame: ArrayBuffer) => void;
-export type StallListener = (silentMs: number) => void;
+export type StallListener = (silentMs: number, restarts: number) => void;
+
+const MAX_CAPTURE_RESTARTS: number = 3;
 
 export class VoiceAudio {
   private capturer: audio.AudioCapturer | null = null;
@@ -94,11 +108,19 @@ export class VoiceAudio {
   private framesIn: number = 0;
   private lastCaptureAt: number = 0;
   private stallTimer: number = -1;
-  private stallReported: boolean = false;
+  private restarts: number = 0;
+  private restarting: boolean = false;
+  private running: boolean = false;
+  private source: audio.SourceType = audio.SourceType.SOURCE_TYPE_MIC;
+  private onFrame: FrameListener = () => {
+  };
+  private onStall: StallListener = () => {
+  };
 
   /**
-   * Starts playback and capture. onStall fires once when the capturer stops delivering buffers
-   * for more than a second (seen on the emulator); the call keeps going without outgoing audio.
+   * Starts playback and capture. If the capturer stops delivering audio for more than a second (seen on the
+   * emulator: the HAL read fails and readData stops or returns empty buffers), onStall fires and the capturer
+   * is recreated, up to 3 times per call. The call keeps going meanwhile.
    */
   async start(onFrame: FrameListener, onStall: StallListener,
     source: audio.SourceType = defaultCaptureSource()): Promise<void> {
@@ -106,7 +128,11 @@ export class VoiceAudio {
     this.pendingFill = 0;
     this.framesOut = 0;
     this.framesIn = 0;
-    this.stallReported = false;
+    this.restarts = 0;
+    this.source = source;
+    this.onFrame = onFrame;
+    this.onStall = onStall;
+    this.running = true;
 
     const rendererOptions: audio.AudioRendererOptions = {
       streamInfo: STREAM_INFO,
@@ -118,31 +144,10 @@ export class VoiceAudio {
       return audio.AudioDataCallbackResult.VALID;
     });
     this.renderer = renderer;
-
-    const capturerOptions: audio.AudioCapturerOptions = {
-      streamInfo: STREAM_INFO,
-      capturerInfo: { source: source, capturerFlags: 0 }
-    };
-    const capturer = await audio.createAudioCapturer(capturerOptions);
-    capturer.on('readData', (buffer: ArrayBuffer) => {
-      this.lastCaptureAt = Date.now();
-      this.onCaptured(new Uint8Array(buffer), onFrame);
-    });
-    this.capturer = capturer;
-
     await renderer.start();
-    await capturer.start();
-    this.lastCaptureAt = Date.now();
-    this.stallTimer = setInterval(() => {
-      const silentMs = Date.now() - this.lastCaptureAt;
-      if (silentMs > STALL_CHECK_MS && !this.stallReported) {
-        this.stallReported = true;
-        hilog.warn(DOMAIN, TAG, 'capture stalled: no buffers for %{public}d ms', silentMs);
-        onStall(silentMs);
-      }
-    }, STALL_CHECK_MS);
-    hilog.info(DOMAIN, TAG, 'audio started (source=%{public}d capturer=%{public}d renderer=%{public}d)', source,
-      capturer.state, renderer.state);
+    await this.startCapturer();
+    this.stallTimer = setInterval(() => this.checkCapture(), STALL_CHECK_MS);
+    hilog.info(DOMAIN, TAG, 'audio started (source=%{public}d renderer=%{public}d)', source, renderer.state);
   }
 
   /** Queues one frame of caller audio (binary WebSocket message) for playback. */
@@ -152,28 +157,77 @@ export class VoiceAudio {
   }
 
   get stats(): string {
-    return `framesOut=${this.framesOut} framesIn=${this.framesIn} dropped=${this.playback.dropped}`;
+    return `framesOut=${this.framesOut} framesIn=${this.framesIn} dropped=${this.playback.dropped} ` +
+      `underruns=${this.playback.underruns} captureRestarts=${this.restarts}`;
   }
 
   async stop(): Promise<void> {
+    this.running = false;
     if (this.stallTimer >= 0) {
       clearInterval(this.stallTimer);
       this.stallTimer = -1;
     }
-    const capturer = this.capturer;
     const renderer = this.renderer;
-    this.capturer = null;
     this.renderer = null;
-    if (capturer !== null) {
-      await VoiceAudio.safely('capturer.stop', () => capturer.stop());
-      await VoiceAudio.safely('capturer.release', () => capturer.release());
-    }
+    await this.stopCapturer();
     if (renderer !== null) {
       await VoiceAudio.safely('renderer.stop', () => renderer.stop());
       await VoiceAudio.safely('renderer.release', () => renderer.release());
     }
     hilog.info(DOMAIN, TAG, 'audio stopped (%{public}s)', this.stats);
     this.playback.clear();
+  }
+
+  private async startCapturer(): Promise<void> {
+    const capturerOptions: audio.AudioCapturerOptions = {
+      streamInfo: STREAM_INFO,
+      capturerInfo: { source: this.source, capturerFlags: 0 }
+    };
+    const capturer = await audio.createAudioCapturer(capturerOptions);
+    capturer.on('readData', (buffer: ArrayBuffer) => {
+      if (buffer.byteLength > 0) {
+        this.lastCaptureAt = Date.now();
+        this.onCaptured(new Uint8Array(buffer));
+      }
+    });
+    this.capturer = capturer;
+    this.lastCaptureAt = Date.now();
+    await capturer.start();
+  }
+
+  private async stopCapturer(): Promise<void> {
+    const capturer = this.capturer;
+    this.capturer = null;
+    if (capturer !== null) {
+      await VoiceAudio.safely('capturer.stop', () => capturer.stop());
+      await VoiceAudio.safely('capturer.release', () => capturer.release());
+    }
+  }
+
+  private checkCapture(): void {
+    const silentMs = Date.now() - this.lastCaptureAt;
+    if (!this.running || this.restarting || silentMs <= STALL_CHECK_MS) {
+      return;
+    }
+    hilog.warn(DOMAIN, TAG, 'capture stalled: no audio for %{public}d ms (restarts so far %{public}d)', silentMs,
+      this.restarts);
+    this.onStall(silentMs, this.restarts);
+    if (this.restarts >= MAX_CAPTURE_RESTARTS) {
+      this.lastCaptureAt = Date.now(); // report again only after another full silent period
+      return;
+    }
+    this.restarts++;
+    this.restarting = true;
+    this.pendingFill = 0;
+    this.stopCapturer()
+      .then(() => this.running ? this.startCapturer() : Promise.resolve())
+      .then(() => hilog.info(DOMAIN, TAG, 'capturer restarted (%{public}d)', this.restarts))
+      .catch((e: BusinessError) => hilog.warn(DOMAIN, TAG, 'capturer restart failed: %{public}s %{public}s',
+        String(e.code), String(e.message)))
+      .finally(() => {
+        this.restarting = false;
+        this.lastCaptureAt = Date.now();
+      });
   }
 
   private static async safely(what: string, op: () => Promise<void>): Promise<void> {
@@ -186,7 +240,7 @@ export class VoiceAudio {
     }
   }
 
-  private onCaptured(data: Uint8Array, onFrame: FrameListener): void {
+  private onCaptured(data: Uint8Array): void {
     let offset = 0;
     while (offset < data.byteLength) {
       const n = Math.min(FRAME_BYTES - this.pendingFill, data.byteLength - offset);
@@ -195,7 +249,7 @@ export class VoiceAudio {
       offset += n;
       if (this.pendingFill === FRAME_BYTES) {
         this.framesOut++;
-        onFrame(this.pending.buffer.slice(0));
+        this.onFrame(this.pending.buffer.slice(0));
         this.pendingFill = 0;
       }
     }

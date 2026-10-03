@@ -144,32 +144,42 @@ JS sends commands and receives control events only, so 50 audio frames per secon
 
 Codegen: `package.json` → `harmony.codegenConfig` (RNOH `codegen-harmony` v1, run by the hvigor plugin on every build; output in git-ignored `cpp/generated/` and `oh_modules/.../generated/`) and `codegenConfig` (React Native Android codegen, generates `NativeCallEngineSpec`).
 
-API: `connectControl(url, deviceToken)`, `disconnectControl()`, `requestMicrophonePermission()`, `acceptCall(callUrl)`, `hangup()`, `sendDtmf(digits)`. Events (via `DeviceEventEmitter`, names `CallEngine.on*`): `incomingCall` (includes the derived `callUrl`), `risk`, `verifyPassword`, `callEnded`, `protectionStatus`, `error`.
+API: `connectControl(url, deviceToken)`, `disconnectControl()`, `requestMicrophonePermission()`, `acceptCall(callId)`, `hangup()` (also rejects a ringing call), `sendDtmf(digits)`. Events (via `DeviceEventEmitter`, names `CallEngine.on*`): `incomingCall` `{callId, caller, lang}`, `callActive`, `risk`, `verifyPassword`, `callEnded` `{callId, reason}`, `protectionStatus` `{available, connected}`, `error`. The one-time call token stays in native code.
 
 ### Protocol v0
 
-- Control: `WS /app/control?device_token=<token>`. Backend → app `{"type":"incoming_call","callId","token","caller","lang"}`, `{"type":"protection_status","available":true}`; app → backend `{"type":"ping"}` every 15 s, answered with `{"type":"pong"}`. The app reconnects with exponential backoff (1 s up to 30 s) and reports `protectionStatus.connected=false` meanwhile (fail-open: calls are not blocked).
-- Call: `WS /app/call/{callId}?token=<one-time token>`. Binary frames are PCM16 LE mono 16 kHz, 20 ms = 640 bytes, in both directions. Backend → app `{"type":"risk","score","level":"none|warn|high","scamType","reasons":[]}`, `{"type":"verify_password"}`, `{"type":"call_ended","reason"}`; app → backend `{"type":"accept"}`, `{"type":"hangup"}`, `{"type":"dtmf","digits"}`.
-- `ws://` is only for the localhost dev path; production uses `wss://`.
+The source of truth is `docs/APP_PROTOCOL.md` in the server repository (branch `feat/server-skeleton`). How the app implements it:
+
+- Control `WS /app/control?device_token=…`: ping every 15 s. Any close (1000, 1008 bad token, 4000 idle after 45 s, network error) triggers a reconnect with backoff 1 s, 2 s, 5 s, then every 10 s; the backoff resets on the first valid message. While disconnected `protectionStatus.connected=false` and the UI shows "protection unavailable". 1008 also emits `error` `control_auth_failed`.
+- `incoming_call` opens the call channel `WS /app/call/{callId}?token=…` immediately (state ringing; the caller hears ringback). `call_ended` can arrive while ringing (`timeout` after 30 s, `caller_hangup`).
+- `acceptCall` sends `accept` and only then starts mic and speaker (binary PCM16 LE mono 16 kHz, 640-byte frames, both ways). Playback uses a jitter buffer: 60 ms prebuffer after an underrun, at most 200 ms queued.
+- `hangup` sends `hangup` (also to reject while ringing); the backend answers `call_ended(senior_hangup)` and closes. If that does not arrive within 2 s the app ends the call locally with `senior_hangup`.
+- `sendDtmf` accepts `0-9 * #`, 1–32 characters (family password while `verify_password` is pending).
+- `call_ended` reasons: `caller_hangup`, `senior_hangup`, `scam_blocked`, `timeout`, `error`. A call channel that closes without `call_ended` ends with `error` (1008 also emits `error` `call_auth_failed`).
+- Unknown message types and fields are ignored. `ws://` only on the localhost dev path; production uses `wss://`.
 
 ### Audio on the DevEco emulator
 
 - The macOS host must allow the emulator to use the microphone. While that was being sorted out, the first capture runs stalled (VOICE_COMMUNICATION after 3 buffers; MIC after about 8 s, then `stop()` failed with 6800301). After that, 10 s runs of MIC and VOICE_COMMUNICATION at 16 kHz and 48 kHz all delivered continuous buffers (16 kHz: about 32.6 kB/s, 51 callbacks of 640 B per second) and stopped cleanly.
-- `VoiceAudio` uses MIC when `deviceInfo.productModel === 'emulator'` and VOICE_COMMUNICATION (echo cancellation) on real phones. A watchdog emits `error` with code `audio_capture_stalled` if no buffers arrive for 1 s.
+- `VoiceAudio` uses MIC when `deviceInfo.productModel === 'emulator'` and VOICE_COMMUNICATION (echo cancellation) on real phones.
+- Capture can still stall mid-call on the emulator (seen once after 5 s: the HAL logs `CaptureReadFrame failed` and no audio arrives). A watchdog emits `error` `audio_capture_stalled` after 1 s without audio and recreates the capturer (up to 3 times per call). The recovery path has not been observed in action yet.
 - Playback with `STREAM_USAGE_VOICE_COMMUNICATION` goes to the speaker on the emulator.
 
 ### Local end-to-end test (silent)
 
 ```bash
 cd app
-uv run --with websockets python tools/fake_backend.py --port 8765 --call-after 3
+uv run --with websockets python tools/fake_backend.py --port 8765 --call-after 3   # see --help for scenarios
 hdc -t 127.0.0.1:5555 rport tcp:8765 tcp:8765
-# a) from JS: open the app, tap Connect, then Accept; risk updates arrive after 3, 6 and 9 s, then the password prompt
-# b) natively, without JS (auto-accept, DTMF 1234, hang up after 12 s; logs: hdc hilog | grep CallEngine):
-hdc -t 127.0.0.1:5555 shell aa start -a EntryAbility -b pl.sprawdzam.app --ps spike call --ps url ws://127.0.0.1:8765/app/control --ps secs 12
+# a) from JS: open the app, tap Connect, then Accept
+# b) natively, without JS (logs: hdc hilog | grep CallEngine):
+hdc -t 127.0.0.1:5555 shell aa start -a EntryAbility -b pl.sprawdzam.app --ps spike call \
+  --ps mode accept|reject|ignore --ps ring 2 --ps secs 16 --ps dtmf 1234
 ```
 
-Port 8000 is used by `basal-serve` on the dev Mac, hence 8765. The fake backend sends only zero PCM frames, so nothing is audible.
+Fake backend options: `--scenario scam|benign`, `--password 1234`, `--password-timeout 20`, `--caller-hangup N`, `--idle 45`, `--device-token X` (1008 for any other token). Port 8000 is used by `basal-serve` on the dev Mac, hence 8765. The fake backend sends only zero PCM frames, so nothing is audible.
+
+Verified on the emulator (2026-10-03, native path): accept + correct password (call continues, then `senior_hangup`), wrong password (`scam_blocked` after the timeout), reject while ringing (`senior_hangup`), ignore (`timeout` after 30 s), `caller_hangup`, wrong device token (1008, backoff 1/2/5/10 s), 4000 idle close followed by a reconnect.
 
 ### Debug spikes
 
@@ -177,7 +187,7 @@ Port 8000 is used by `basal-serve` on the dev Mac, hence 8765. The fake backend 
 
 - `--ps spike audio [--ps source mic|voice|recognition|unprocessed] [--ps rate 16000|48000] [--ps secs 10] [--ps play 0|1]`: capture test with RMS per 100 ms and throughput logs (`hdc hilog | grep SprawdzamAudio`). Silent unless `play 1`.
 - `--ps spike beep`: **audible** siren via MUSIC and VOICE_COMMUNICATION. Agree on audible tests with the team before running them on a shared emulator.
-- `--ps spike call`: native call self-test (see above).
+- `--ps spike call [--ps mode accept|reject|ignore]`: native call self-test (see above).
 
 ## Checks
 

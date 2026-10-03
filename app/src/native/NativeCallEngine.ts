@@ -3,6 +3,7 @@
  *
  * The audio path (WebSocket PCM frames <-> AudioCapturer/AudioRenderer) stays native;
  * JS only sends control commands and receives control events (see CallEngine.ts).
+ * Protocol: docs/APP_PROTOCOL.md in the server repository (v0).
  * Codegen (react-native codegen-harmony, v1) reads this file via package.json "harmony.codegenConfig".
  */
 import type {TurboModule} from 'react-native';
@@ -15,11 +16,14 @@ export interface Spec extends TurboModule {
   disconnectControl(): Promise<void>;
   /** Asks for the microphone runtime permission. Resolves true when granted. */
   requestMicrophonePermission(): Promise<boolean>;
-  /** Opens the call WebSocket, sends `accept` and starts capture/playback. */
-  acceptCall(callUrl: string): Promise<void>;
-  /** Sends `hangup`, closes the call WebSocket and stops audio. */
+  /**
+   * Answers the ringing call (its call channel is already open since incoming_call):
+   * sends `accept` and starts capture/playback.
+   */
+  acceptCall(callId: string): Promise<void>;
+  /** Ends the active call or rejects the ringing one (`hangup`); callEnded follows. */
   hangup(): Promise<void>;
-  /** Sends DTMF digits typed by the user (e.g. the family password). */
+  /** Sends keypad digits (0-9, *, #; 1-32 characters), e.g. the family password. */
   sendDtmf(digits: string): Promise<void>;
 }
 

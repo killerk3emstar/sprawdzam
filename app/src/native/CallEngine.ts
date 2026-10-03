@@ -3,32 +3,39 @@
  *
  * Commands go to the native module (ArkTS on HarmonyOS, Kotlin stub on Android).
  * Events arrive through DeviceEventEmitter, emitted natively as `CallEngine.<name>`.
- * Audio never passes through JS.
+ * Audio and the one-time call token never pass through JS.
+ * Protocol: docs/APP_PROTOCOL.md in the server repository (v0).
  */
 import {DeviceEventEmitter, EmitterSubscription} from 'react-native';
 import NativeCallEngine, {type Spec} from './NativeCallEngine';
 
 export type IncomingCall = {
   callId: string;
-  token: string;
+  /** Masked number for display only; "unknown" when the number is hidden. */
   caller: string;
-  lang: string;
-  /** Call WebSocket URL derived natively from the control URL; pass it to acceptCall(). */
-  callUrl: string;
+  lang: 'pl' | 'en' | string;
 };
 
+export type CallActive = {callId: string};
+
 export type RiskLevel = 'none' | 'warn' | 'high';
+export type ScamType = 'none' | 'grandchild' | 'police' | 'bank' | 'other';
+export type RiskReason = 'money' | 'secrecy' | 'authority' | 'urgency';
 
 export type RiskUpdate = {
+  callId: string;
+  /** 0-100, smoothed by the backend. */
   score: number;
-  level: RiskLevel;
-  scamType: string;
-  reasons: string[];
+  level: RiskLevel | string;
+  scamType: ScamType | string;
+  reasons: (RiskReason | string)[];
 };
 
 export type VerifyPasswordRequest = {callId: string};
 
-export type CallEnded = {callId: string; reason: string};
+export type CallEndReason = 'caller_hangup' | 'senior_hangup' | 'scam_blocked' | 'timeout' | 'error';
+
+export type CallEnded = {callId: string; reason: CallEndReason | string};
 
 export type ProtectionStatus = {
   /** Backend reports that protection works. */
@@ -41,6 +48,7 @@ export type CallEngineError = {code: string; message: string};
 
 export type CallEngineEvents = {
   incomingCall: IncomingCall;
+  callActive: CallActive;
   risk: RiskUpdate;
   verifyPassword: VerifyPasswordRequest;
   callEnded: CallEnded;
@@ -50,6 +58,7 @@ export type CallEngineEvents = {
 
 export const CALL_ENGINE_EVENT_NAMES: {[K in keyof CallEngineEvents]: string} = {
   incomingCall: 'CallEngine.onIncomingCall',
+  callActive: 'CallEngine.onCallActive',
   risk: 'CallEngine.onRisk',
   verifyPassword: 'CallEngine.onVerifyPassword',
   callEnded: 'CallEngine.onCallEnded',
@@ -78,8 +87,8 @@ export const CallEngine = {
   requestMicrophonePermission(): Promise<boolean> {
     return native().requestMicrophonePermission();
   },
-  acceptCall(callUrl: string): Promise<void> {
-    return native().acceptCall(callUrl);
+  acceptCall(callId: string): Promise<void> {
+    return native().acceptCall(callId);
   },
   hangup(): Promise<void> {
     return native().hangup();

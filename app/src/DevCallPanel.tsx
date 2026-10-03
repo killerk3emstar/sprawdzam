@@ -104,13 +104,14 @@ export function DevCallPanel(): React.JSX.Element {
       return;
     }
     setCallState('connecting');
-    CallEngine.acceptCall(incoming.callUrl).then(
+    CallEngine.acceptCall(incoming.callId).then(
       () => {
         setCallState('active');
         addLog('call active');
       },
       (e: unknown) => {
-        setCallState('idle');
+        // The call stays ringing (or ends via callEnded) on the native side.
+        setCallState('ringing');
         addLog(`accept failed: ${e instanceof Error ? e.message : String(e)}`);
       },
     );
@@ -180,7 +181,7 @@ export function DevCallPanel(): React.JSX.Element {
           <View style={styles.row}>
             {callState === 'ringing' ? <Button title="Odbierz / Accept" onPress={accept} /> : null}
             {callState === 'ringing' ? (
-              <Button title="Odrzuć / Dismiss" onPress={() => setCallState('idle')} />
+              <Button title="Odrzuć / Reject" color="#C62828" onPress={() => run('reject', () => CallEngine.hangup())} />
             ) : (
               <Button title="Rozłącz / Hang up" color="#C62828" onPress={() => run('hangup', () => CallEngine.hangup())} />
             )}
