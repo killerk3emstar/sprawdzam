@@ -1,0 +1,41 @@
+{
+  // build-profile.json5 can contain signingConfigs which are unique for each developer, therefore that file is ignored by Git. Create a build-profile.json5 based on this template after cloning this repository to be able to open this project in DevEco Studio.
+  app: {
+    products: [
+      {
+        name: 'default',
+        signingConfig: 'default',
+        // Huawei challenge: API 20 is the minimum supported level (never lower).
+        compatibleSdkVersion: '6.0.0(20)',
+        // Compile and target the SDK bundled with DevEco Studio 6.1.1 (API 24).
+        compileSdkVersion: '6.1.1(24)',
+        targetSdkVersion: '6.1.1(24)',
+        runtimeOS: 'HarmonyOS',
+        buildOption: {
+          nativeCompiler: 'BiSheng'
+        }
+      },
+    ],
+    buildModeSet: [
+      {
+        name: 'debug',
+      },
+      {
+        name: 'release',
+      },
+    ],
+    signingConfigs: [],
+  },
+  modules: [
+    {
+      name: 'entry',
+      srcPath: './entry',
+      targets: [
+        {
+          name: 'default',
+          applyToProducts: ['default'],
+        },
+      ],
+    },
+  ],
+}
