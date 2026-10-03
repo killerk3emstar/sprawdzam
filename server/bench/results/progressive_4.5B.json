@@ -1,0 +1,874 @@
+{
+ "en_normal_01_grandson": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 9,
+    "approx_s": 4,
+    "not_low": 3
+   },
+   {
+    "turn": 2,
+    "words": 27,
+    "approx_s": 11,
+    "not_low": 2
+   },
+   {
+    "turn": 3,
+    "words": 72,
+    "approx_s": 29,
+    "not_low": 12
+   },
+   {
+    "turn": 4,
+    "words": 87,
+    "approx_s": 35,
+    "not_low": 7
+   },
+   {
+    "turn": 5,
+    "words": 113,
+    "approx_s": 45,
+    "not_low": 7
+   },
+   {
+    "turn": 6,
+    "words": 128,
+    "approx_s": 51,
+    "not_low": 8
+   },
+   {
+    "turn": 7,
+    "words": 153,
+    "approx_s": 61,
+    "not_low": 7
+   },
+   {
+    "turn": 8,
+    "words": 163,
+    "approx_s": 65,
+    "not_low": 7
+   },
+   {
+    "turn": 9,
+    "words": 173,
+    "approx_s": 69,
+    "not_low": 4
+   }
+  ],
+  "first_warn": null
+ },
+ "en_normal_02_surgery": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 19,
+    "approx_s": 8,
+    "not_low": 4
+   },
+   {
+    "turn": 2,
+    "words": 23,
+    "approx_s": 9,
+    "not_low": 3
+   },
+   {
+    "turn": 3,
+    "words": 51,
+    "approx_s": 20,
+    "not_low": 2
+   },
+   {
+    "turn": 4,
+    "words": 62,
+    "approx_s": 25,
+    "not_low": 2
+   },
+   {
+    "turn": 5,
+    "words": 99,
+    "approx_s": 40,
+    "not_low": 2
+   },
+   {
+    "turn": 6,
+    "words": 108,
+    "approx_s": 43,
+    "not_low": 2
+   },
+   {
+    "turn": 7,
+    "words": 149,
+    "approx_s": 60,
+    "not_low": 1
+   },
+   {
+    "turn": 8,
+    "words": 156,
+    "approx_s": 62,
+    "not_low": 1
+   },
+   {
+    "turn": 9,
+    "words": 164,
+    "approx_s": 66,
+    "not_low": 1
+   }
+  ],
+  "first_warn": null
+ },
+ "en_scam_01_bank": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 20,
+    "approx_s": 8,
+    "not_low": 90
+   },
+   {
+    "turn": 2,
+    "words": 23,
+    "approx_s": 9,
+    "not_low": 69
+   },
+   {
+    "turn": 3,
+    "words": 51,
+    "approx_s": 20,
+    "not_low": 95
+   },
+   {
+    "turn": 4,
+    "words": 57,
+    "approx_s": 23,
+    "not_low": 84
+   },
+   {
+    "turn": 5,
+    "words": 94,
+    "approx_s": 38,
+    "not_low": 97
+   },
+   {
+    "turn": 6,
+    "words": 102,
+    "approx_s": 41,
+    "not_low": 96
+   },
+   {
+    "turn": 7,
+    "words": 159,
+    "approx_s": 64,
+    "not_low": 99
+   },
+   {
+    "turn": 8,
+    "words": 165,
+    "approx_s": 66,
+    "not_low": 99
+   },
+   {
+    "turn": 9,
+    "words": 184,
+    "approx_s": 74,
+    "not_low": 99
+   }
+  ],
+  "first_warn": {
+   "turn": 1,
+   "words": 20,
+   "approx_s": 8,
+   "not_low": 90
+  }
+ },
+ "en_scam_02_grandchild": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 7,
+    "approx_s": 3,
+    "not_low": 7
+   },
+   {
+    "turn": 2,
+    "words": 12,
+    "approx_s": 5,
+    "not_low": 6
+   },
+   {
+    "turn": 3,
+    "words": 46,
+    "approx_s": 18,
+    "not_low": 4
+   },
+   {
+    "turn": 4,
+    "words": 53,
+    "approx_s": 21,
+    "not_low": 5
+   },
+   {
+    "turn": 5,
+    "words": 89,
+    "approx_s": 36,
+    "not_low": 62
+   },
+   {
+    "turn": 6,
+    "words": 95,
+    "approx_s": 38,
+    "not_low": 71
+   },
+   {
+    "turn": 7,
+    "words": 124,
+    "approx_s": 50,
+    "not_low": 71
+   },
+   {
+    "turn": 8,
+    "words": 134,
+    "approx_s": 54,
+    "not_low": 63
+   },
+   {
+    "turn": 9,
+    "words": 161,
+    "approx_s": 64,
+    "not_low": 67
+   }
+  ],
+  "first_warn": {
+   "turn": 5,
+   "words": 89,
+   "approx_s": 36,
+   "not_low": 62
+  }
+ },
+ "pl_normal_01_lunch": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 12,
+    "approx_s": 5,
+    "not_low": 2
+   },
+   {
+    "turn": 2,
+    "words": 27,
+    "approx_s": 11,
+    "not_low": 1
+   },
+   {
+    "turn": 3,
+    "words": 42,
+    "approx_s": 17,
+    "not_low": 1
+   },
+   {
+    "turn": 4,
+    "words": 53,
+    "approx_s": 21,
+    "not_low": 1
+   },
+   {
+    "turn": 5,
+    "words": 79,
+    "approx_s": 32,
+    "not_low": 5
+   },
+   {
+    "turn": 6,
+    "words": 84,
+    "approx_s": 34,
+    "not_low": 9
+   },
+   {
+    "turn": 7,
+    "words": 103,
+    "approx_s": 41,
+    "not_low": 14
+   },
+   {
+    "turn": 8,
+    "words": 114,
+    "approx_s": 46,
+    "not_low": 9
+   },
+   {
+    "turn": 9,
+    "words": 136,
+    "approx_s": 54,
+    "not_low": 6
+   },
+   {
+    "turn": 10,
+    "words": 142,
+    "approx_s": 57,
+    "not_low": 5
+   }
+  ],
+  "first_warn": null
+ },
+ "pl_normal_02_son_loan": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 7,
+    "approx_s": 3,
+    "not_low": 2
+   },
+   {
+    "turn": 2,
+    "words": 14,
+    "approx_s": 6,
+    "not_low": 1
+   },
+   {
+    "turn": 3,
+    "words": 42,
+    "approx_s": 17,
+    "not_low": 58
+   },
+   {
+    "turn": 4,
+    "words": 55,
+    "approx_s": 22,
+    "not_low": 18
+   },
+   {
+    "turn": 5,
+    "words": 77,
+    "approx_s": 31,
+    "not_low": 12
+   },
+   {
+    "turn": 6,
+    "words": 87,
+    "approx_s": 35,
+    "not_low": 8
+   },
+   {
+    "turn": 7,
+    "words": 110,
+    "approx_s": 44,
+    "not_low": 5
+   },
+   {
+    "turn": 8,
+    "words": 117,
+    "approx_s": 47,
+    "not_low": 4
+   },
+   {
+    "turn": 9,
+    "words": 138,
+    "approx_s": 55,
+    "not_low": 3
+   },
+   {
+    "turn": 10,
+    "words": 146,
+    "approx_s": 58,
+    "not_low": 3
+   }
+  ],
+  "first_warn": {
+   "turn": 3,
+   "words": 42,
+   "approx_s": 17,
+   "not_low": 58
+  }
+ },
+ "pl_normal_03_clinic": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 18,
+    "approx_s": 7,
+    "not_low": 4
+   },
+   {
+    "turn": 2,
+    "words": 22,
+    "approx_s": 9,
+    "not_low": 3
+   },
+   {
+    "turn": 3,
+    "words": 44,
+    "approx_s": 18,
+    "not_low": 3
+   },
+   {
+    "turn": 4,
+    "words": 53,
+    "approx_s": 21,
+    "not_low": 1
+   },
+   {
+    "turn": 5,
+    "words": 83,
+    "approx_s": 33,
+    "not_low": 1
+   },
+   {
+    "turn": 6,
+    "words": 93,
+    "approx_s": 37,
+    "not_low": 1
+   },
+   {
+    "turn": 7,
+    "words": 117,
+    "approx_s": 47,
+    "not_low": 1
+   },
+   {
+    "turn": 8,
+    "words": 123,
+    "approx_s": 49,
+    "not_low": 1
+   },
+   {
+    "turn": 9,
+    "words": 129,
+    "approx_s": 52,
+    "not_low": 0
+   },
+   {
+    "turn": 10,
+    "words": 132,
+    "approx_s": 53,
+    "not_low": 0
+   }
+  ],
+  "first_warn": null
+ },
+ "pl_normal_04_courier": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 23,
+    "approx_s": 9,
+    "not_low": 29
+   },
+   {
+    "turn": 2,
+    "words": 42,
+    "approx_s": 17,
+    "not_low": 5
+   },
+   {
+    "turn": 3,
+    "words": 68,
+    "approx_s": 27,
+    "not_low": 18
+   },
+   {
+    "turn": 4,
+    "words": 85,
+    "approx_s": 34,
+    "not_low": 12
+   },
+   {
+    "turn": 5,
+    "words": 94,
+    "approx_s": 38,
+    "not_low": 5
+   },
+   {
+    "turn": 6,
+    "words": 115,
+    "approx_s": 46,
+    "not_low": 7
+   },
+   {
+    "turn": 7,
+    "words": 124,
+    "approx_s": 50,
+    "not_low": 3
+   },
+   {
+    "turn": 8,
+    "words": 128,
+    "approx_s": 51,
+    "not_low": 2
+   }
+  ],
+  "first_warn": null
+ },
+ "pl_normal_05_neighbour": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 9,
+    "approx_s": 4,
+    "not_low": 2
+   },
+   {
+    "turn": 2,
+    "words": 17,
+    "approx_s": 7,
+    "not_low": 1
+   },
+   {
+    "turn": 3,
+    "words": 34,
+    "approx_s": 14,
+    "not_low": 2
+   },
+   {
+    "turn": 4,
+    "words": 42,
+    "approx_s": 17,
+    "not_low": 1
+   },
+   {
+    "turn": 5,
+    "words": 62,
+    "approx_s": 25,
+    "not_low": 2
+   },
+   {
+    "turn": 6,
+    "words": 80,
+    "approx_s": 32,
+    "not_low": 1
+   },
+   {
+    "turn": 7,
+    "words": 101,
+    "approx_s": 40,
+    "not_low": 1
+   },
+   {
+    "turn": 8,
+    "words": 114,
+    "approx_s": 46,
+    "not_low": 1
+   },
+   {
+    "turn": 9,
+    "words": 129,
+    "approx_s": 52,
+    "not_low": 0
+   },
+   {
+    "turn": 10,
+    "words": 136,
+    "approx_s": 54,
+    "not_low": 0
+   }
+  ],
+  "first_warn": null
+ },
+ "pl_scam_01_police": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 17,
+    "approx_s": 7,
+    "not_low": 30
+   },
+   {
+    "turn": 2,
+    "words": 24,
+    "approx_s": 10,
+    "not_low": 46
+   },
+   {
+    "turn": 3,
+    "words": 47,
+    "approx_s": 19,
+    "not_low": 85
+   },
+   {
+    "turn": 4,
+    "words": 56,
+    "approx_s": 22,
+    "not_low": 70
+   },
+   {
+    "turn": 5,
+    "words": 86,
+    "approx_s": 34,
+    "not_low": 71
+   },
+   {
+    "turn": 6,
+    "words": 91,
+    "approx_s": 36,
+    "not_low": 87
+   },
+   {
+    "turn": 7,
+    "words": 102,
+    "approx_s": 41,
+    "not_low": 94
+   },
+   {
+    "turn": 8,
+    "words": 113,
+    "approx_s": 45,
+    "not_low": 90
+   },
+   {
+    "turn": 9,
+    "words": 156,
+    "approx_s": 62,
+    "not_low": 99
+   }
+  ],
+  "first_warn": {
+   "turn": 3,
+   "words": 47,
+   "approx_s": 19,
+   "not_low": 85
+  }
+ },
+ "pl_scam_02_grandchild": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 9,
+    "approx_s": 4,
+    "not_low": 20
+   },
+   {
+    "turn": 2,
+    "words": 16,
+    "approx_s": 6,
+    "not_low": 48
+   },
+   {
+    "turn": 3,
+    "words": 48,
+    "approx_s": 19,
+    "not_low": 98
+   },
+   {
+    "turn": 4,
+    "words": 58,
+    "approx_s": 23,
+    "not_low": 97
+   },
+   {
+    "turn": 5,
+    "words": 77,
+    "approx_s": 31,
+    "not_low": 98
+   },
+   {
+    "turn": 6,
+    "words": 88,
+    "approx_s": 35,
+    "not_low": 98
+   },
+   {
+    "turn": 7,
+    "words": 120,
+    "approx_s": 48,
+    "not_low": 98
+   },
+   {
+    "turn": 8,
+    "words": 129,
+    "approx_s": 52,
+    "not_low": 98
+   },
+   {
+    "turn": 9,
+    "words": 155,
+    "approx_s": 62,
+    "not_low": 98
+   }
+  ],
+  "first_warn": {
+   "turn": 3,
+   "words": 48,
+   "approx_s": 19,
+   "not_low": 98
+  }
+ },
+ "pl_scam_03_bank": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 14,
+    "approx_s": 6,
+    "not_low": 15
+   },
+   {
+    "turn": 2,
+    "words": 17,
+    "approx_s": 7,
+    "not_low": 11
+   },
+   {
+    "turn": 3,
+    "words": 36,
+    "approx_s": 14,
+    "not_low": 85
+   },
+   {
+    "turn": 4,
+    "words": 43,
+    "approx_s": 17,
+    "not_low": 94
+   },
+   {
+    "turn": 5,
+    "words": 76,
+    "approx_s": 30,
+    "not_low": 96
+   },
+   {
+    "turn": 6,
+    "words": 85,
+    "approx_s": 34,
+    "not_low": 96
+   },
+   {
+    "turn": 7,
+    "words": 134,
+    "approx_s": 54,
+    "not_low": 99
+   },
+   {
+    "turn": 8,
+    "words": 142,
+    "approx_s": 57,
+    "not_low": 99
+   },
+   {
+    "turn": 9,
+    "words": 156,
+    "approx_s": 62,
+    "not_low": 99
+   }
+  ],
+  "first_warn": {
+   "turn": 3,
+   "words": 36,
+   "approx_s": 14,
+   "not_low": 85
+  }
+ },
+ "pl_scam_04_cbs": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 17,
+    "approx_s": 7,
+    "not_low": 79
+   },
+   {
+    "turn": 2,
+    "words": 21,
+    "approx_s": 8,
+    "not_low": 91
+   },
+   {
+    "turn": 3,
+    "words": 47,
+    "approx_s": 19,
+    "not_low": 97
+   },
+   {
+    "turn": 4,
+    "words": 53,
+    "approx_s": 21,
+    "not_low": 97
+   },
+   {
+    "turn": 5,
+    "words": 86,
+    "approx_s": 34,
+    "not_low": 99
+   },
+   {
+    "turn": 6,
+    "words": 93,
+    "approx_s": 37,
+    "not_low": 98
+   },
+   {
+    "turn": 7,
+    "words": 153,
+    "approx_s": 61,
+    "not_low": 99
+   }
+  ],
+  "first_warn": {
+   "turn": 1,
+   "words": 17,
+   "approx_s": 7,
+   "not_low": 79
+  }
+ },
+ "pl_scam_05_investment": {
+  "series": [
+   {
+    "turn": 1,
+    "words": 20,
+    "approx_s": 8,
+    "not_low": 98
+   },
+   {
+    "turn": 2,
+    "words": 28,
+    "approx_s": 11,
+    "not_low": 95
+   },
+   {
+    "turn": 3,
+    "words": 54,
+    "approx_s": 22,
+    "not_low": 99
+   },
+   {
+    "turn": 4,
+    "words": 59,
+    "approx_s": 24,
+    "not_low": 98
+   },
+   {
+    "turn": 5,
+    "words": 83,
+    "approx_s": 33,
+    "not_low": 99
+   },
+   {
+    "turn": 6,
+    "words": 88,
+    "approx_s": 35,
+    "not_low": 98
+   },
+   {
+    "turn": 7,
+    "words": 125,
+    "approx_s": 50,
+    "not_low": 99
+   },
+   {
+    "turn": 8,
+    "words": 130,
+    "approx_s": 52,
+    "not_low": 99
+   },
+   {
+    "turn": 9,
+    "words": 154,
+    "approx_s": 62,
+    "not_low": 99
+   }
+  ],
+  "first_warn": {
+   "turn": 1,
+   "words": 20,
+   "approx_s": 8,
+   "not_low": 98
+  }
+ }
+}
