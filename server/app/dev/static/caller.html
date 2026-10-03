@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dev caller</title>
+<link rel="stylesheet" href="/dev/static/style.css">
+</head>
+<body>
+<main>
+  <h1>Dev caller <small>plays the caller over the real media-stream path (Twilio format)</small></h1>
+  <p class="hint">Open <a href="/dev/senior" target="_blank">/dev/senior</a> first and turn
+    protection on. Use headphones: two tabs on one computer will otherwise feed back.</p>
+  <div class="card">
+    <label>Caller number <input id="caller" value="+48500000001" autocomplete="off"></label>
+    <label>Language
+      <select id="lang"><option value="">server default</option><option>pl</option><option>en</option></select>
+    </label>
+    <div class="row">
+      <button id="call" class="primary">Call</button>
+      <button id="hangup" class="danger" disabled>Hang up</button>
+    </div>
+    <p>Status: <span id="status" class="status">idle</span></p>
+    <p class="hint">Keypad (caller DTMF, e.g. the family password):</p>
+    <div class="keypad" id="keypad"></div>
+  </div>
+  <pre id="log"></pre>
+</main>
+<script type="module">
+import { base64ToBytes, bytesToBase64, makeLogger, mulawDecode, mulawEncode, startAudio, wsBase }
+  from "/dev/static/audio.js";
+
+const $ = (id) => document.getElementById(id);
+const log = makeLogger($("log"));
+const ACCOUNT = "AC" + "0".repeat(32);
+let ws = null, audio = null, streamSid = null, callId = null, seq = 0, chunk = 0, t0 = 0;
+
+const hex = (n) => [...crypto.getRandomValues(new Uint8Array(n))]
+  .map((b) => b.toString(16).padStart(2, "0")).join("");
+const setStatus = (text) => { $("status").textContent = text; log(text); };
+const send = (obj) => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ sequenceNumber: String(++seq), ...obj }));
+  }
+};
+
+function sendFrame(samples) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  chunk += 1;
+  send({ event: "media", streamSid, media: {
+    track: "inbound", chunk: String(chunk), timestamp: String(Math.round(performance.now() - t0)),
+    payload: bytesToBase64(mulawEncode(samples)) } });
+}
+
+function onServerMessage(msg) {
+  if (msg.event === "media") {
+    if (audio) audio.play(mulawDecode(base64ToBytes(msg.media.payload)));
+  } else if (msg.event === "clear") {
+    if (audio) audio.clear();
+    log("clear: answered, ringback stopped");
+  } else if (msg.event === "mark") {
+    send({ event: "mark", streamSid, mark: { name: msg.mark.name } });
+  }
+}
+
+async function cleanup() {
+  if (audio) { const a = audio; audio = null; await a.stop(); }
+  ws = null;
+  $("call").disabled = false;
+  $("hangup").disabled = true;
+}
+
+$("call").onclick = async () => {
+  $("call").disabled = true;
+  try {
+    const res = await fetch("/dev/calls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caller: $("caller").value.trim(), lang: $("lang").value || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setStatus(`rejected (${res.status} ${data.reason || data.error || ""}): "${data.message || ""}"`);
+      $("call").disabled = false;
+      return;
+    }
+    callId = data.callId;
+    streamSid = "MZ" + hex(16);
+    seq = 0; chunk = 0;
+    log(`call ${callId} admitted; a real caller now hears: "${data.notice}"`);
+    audio = await startAudio({ targetRate: 8000, frameSamples: 160, onFrame: sendFrame });
+    ws = new WebSocket(wsBase() + data.streamPath);
+    ws.onopen = () => {
+      send({ event: "connected", protocol: "Call", version: "1.0.0" });
+      send({ event: "start", streamSid, start: {
+        accountSid: ACCOUNT, streamSid, callSid: callId, tracks: ["inbound"],
+        customParameters: { token: data.token, lang: data.lang, callId },
+        mediaFormat: { encoding: "audio/x-mulaw", sampleRate: 8000, channels: 1 } } });
+      t0 = performance.now();
+      setStatus("ringing (waiting for the senior to accept)");
+      $("hangup").disabled = false;
+    };
+    ws.onmessage = (event) => onServerMessage(JSON.parse(event.data));
+    ws.onclose = (event) => { setStatus(`call ended by the backend (code ${event.code})`); cleanup(); };
+  } catch (err) {
+    setStatus(`error: ${err.message}`);
+    cleanup();
+  }
+};
+
+$("hangup").onclick = () => {
+  send({ event: "stop", streamSid, stop: { accountSid: ACCOUNT, callSid: callId } });
+  if (ws) ws.close();
+};
+
+for (const digit of "123456789*0#") {
+  const button = document.createElement("button");
+  button.textContent = digit;
+  button.onclick = () => send({ event: "dtmf", streamSid, dtmf: { track: "inbound_track", digit } });
+  $("keypad").append(button);
+}
+</script>
+</body>
+</html>
