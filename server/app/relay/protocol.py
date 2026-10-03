@@ -19,6 +19,8 @@ CALL_TOKEN_TTL_SECONDS = 300.0
 CONTROL_IDLE_TIMEOUT_SECONDS = 45.0
 MAX_APP_AUDIO_FRAME_BYTES = 6400  # 200 ms of PCM16 16 kHz
 MAX_APP_TEXT_CHARS = 4096
+MAX_CONTROL_TEXT_CHARS = 128 * 1024  # settings with a whitelist of up to MAX_WHITELIST numbers
+MAX_WHITELIST = 2000
 
 CLOSE_NORMAL = 1000
 CLOSE_POLICY = 1008
@@ -47,14 +49,28 @@ def pong() -> dict[str, object]:
     return {"type": "pong"}
 
 
-def incoming_call(call_id: str, token: str, caller: str, lang: Lang) -> dict[str, object]:
+def incoming_call(
+    call_id: str, token: str, caller: str, lang: Lang, trusted: bool = False
+) -> dict[str, object]:
     return {
         "type": "incoming_call",
         "callId": call_id,
         "token": token,
         "caller": caller,
         "lang": lang,
+        "trusted": trusted,
     }
+
+
+def settings_ack(
+    accepted: bool, whitelist: int = 0, ignored: int = 0, error: str | None = None
+) -> dict[str, object]:
+    message: dict[str, object] = {"type": "settings_ack", "accepted": accepted}
+    if accepted:
+        message.update(whitelist=whitelist, ignored=ignored)
+    else:
+        message["error"] = error or "invalid_settings"
+    return message
 
 
 def risk_event(assessment: RiskAssessment) -> dict[str, object]:
@@ -97,19 +113,36 @@ class Dtmf(_AppMsg):
     digits: Annotated[str, StringConstraints(pattern=r"^[0-9*#]{1,32}$")]
 
 
-AppMessage = Annotated[Ping | Accept | Hangup | Dtmf, Field(discriminator="type")]
+class TrustedPerson(_AppMsg):
+    name: Annotated[str, StringConstraints(max_length=80)] = ""
+    number: Annotated[str, StringConstraints(max_length=32)]
+
+
+class SettingsMessage(_AppMsg):
+    """Senior's settings, sent on the control channel after connecting and on every change.
+    Each message replaces the previous settings completely."""
+
+    type: Literal["settings"]
+    lang: Lang
+    trustedPerson: TrustedPerson | None = None
+    whitelist: list[Annotated[str, StringConstraints(max_length=32)]] = Field(
+        default_factory=list, max_length=MAX_WHITELIST
+    )
+
+
+AppMessage = Annotated[Ping | Accept | Hangup | Dtmf | SettingsMessage, Field(discriminator="type")]
 _adapter: TypeAdapter[AppMessage] = TypeAdapter(AppMessage)
-_KNOWN = {"ping", "accept", "hangup", "dtmf"}
+_KNOWN = {"ping", "accept", "hangup", "dtmf", "settings"}
 
 
 class BadAppMessage(ValueError):
     pass
 
 
-def parse_app_message(text: str) -> AppMessage | None:
+def parse_app_message(text: str, max_chars: int = MAX_APP_TEXT_CHARS) -> AppMessage | None:
     """Parse one JSON text frame. None for unknown types (ignored by protocol).
     Raises BadAppMessage for invalid JSON or invalid fields."""
-    if len(text) > MAX_APP_TEXT_CHARS:
+    if len(text) > max_chars:
         raise BadAppMessage("message_too_large")
     try:
         data = json.loads(text)

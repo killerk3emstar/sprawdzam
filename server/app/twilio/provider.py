@@ -106,10 +106,13 @@ class TwilioProvider:
         caller = str(params.get("From") or "")[:64]
         return IncomingCall(call_id=call_sid, account_id=account_sid, caller=caller)
 
-    def connect_markup(self, stream_url: str, lang: Lang, call_id: str, token: str) -> str:
+    def connect_markup(
+        self, stream_url: str, lang: Lang, call_id: str, token: str, announce: bool = True
+    ) -> str:
         voice = VOICES[lang]
         response = VoiceResponse()
-        response.say(PROTECTION_NOTICE[lang], voice=voice.voice, language=voice.language)
+        if announce:
+            response.say(PROTECTION_NOTICE[lang], voice=voice.voice, language=voice.language)
         connect = Connect()
         stream = connect.stream(url=stream_url)
         stream.parameter(name="token", value=token)

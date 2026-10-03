@@ -11,8 +11,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from app.calls.sender import SafeSender
+from app.config import Lang
 from app.logging_setup import log_event
 from app.relay import protocol
+from app.relay.device import DeviceSettings
 
 if TYPE_CHECKING:
     from app.calls.bridge import CallBridge
@@ -33,6 +35,8 @@ class AppHub:
         self._controls: set[SafeSender] = set()
         self._tokens: dict[str, _CallToken] = {}
         self.bridges: dict[str, CallBridge] = {}
+        # v0: one senior device per backend; the last settings message wins.
+        self.device_settings: DeviceSettings | None = None
 
     # ------------------------------------------------------------------ control channel
     @property
@@ -71,6 +75,26 @@ class AppHub:
         for sender in list(self._controls):
             await sender.close(protocol.CLOSE_NORMAL)
         self._controls.clear()
+
+    # ------------------------------------------------------------------ device settings
+    def apply_settings(self, settings: DeviceSettings) -> None:
+        self.device_settings = settings
+        log_event(
+            logger,
+            logging.INFO,
+            "app_settings_applied",
+            lang=settings.lang,
+            trusted_person=bool(settings.trusted_number),
+            whitelist=len(settings.whitelist),
+            ignored=settings.ignored,
+        )
+
+    def lang(self, default: Lang) -> Lang:
+        return self.device_settings.lang if self.device_settings else default
+
+    def is_whitelisted(self, number: str) -> bool:
+        settings = self.device_settings
+        return bool(settings and number and number in settings.whitelist)
 
     # ------------------------------------------------------------------ calls
     def register(self, bridge: CallBridge) -> str:

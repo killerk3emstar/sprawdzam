@@ -112,8 +112,11 @@ class TelephonyProvider(Protocol):
         """Raises InvalidWebhook / WebhookForbidden."""
         ...
 
-    def connect_markup(self, stream_url: str, lang: Lang, call_id: str, token: str) -> str:
-        """Protection notice, then connect the call audio to our media stream WebSocket."""
+    def connect_markup(
+        self, stream_url: str, lang: Lang, call_id: str, token: str, announce: bool = True
+    ) -> str:
+        """Protection notice (unless `announce` is False, e.g. a whitelisted caller), then
+        connect the call audio to our media stream WebSocket."""
         ...
 
     def unavailable_markup(self, lang: Lang) -> str:

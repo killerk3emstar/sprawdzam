@@ -40,6 +40,7 @@ class CallSession:
         segmenter: PauseSegmenter | None = None,
         stt_timeout: float = 3.0,
         queue_size: int = 4,
+        analyse: bool = True,
         transcript_max_age: float = 60.0,
     ) -> None:
         self.call_sid = call_sid
@@ -48,6 +49,9 @@ class CallSession:
         self.stt = stt
         self.monitor = monitor
         self.segmenter = segmenter or PauseSegmenter(STT_RATE)
+        # False for whitelisted contacts: audio is only resampled for the bridge, never
+        # segmented, transcribed or scored.
+        self.analyse = analyse
         self.stt_timeout = stt_timeout
         self.transcript = TranscriptWindow(max_age_seconds=transcript_max_age)
         self.resampler = StreamResampler()
@@ -59,7 +63,8 @@ class CallSession:
 
     # ------------------------------------------------------------------ lifecycle
     def start(self) -> None:
-        self._worker = asyncio.create_task(self._run(), name=f"call-{self.call_sid}")
+        if self.analyse:
+            self._worker = asyncio.create_task(self._run(), name=f"call-{self.call_sid}")
 
     async def close(self, drain_timeout: float = 2.0) -> None:
         """Stop the worker (letting queued segments finish for up to `drain_timeout` s) and
@@ -100,8 +105,9 @@ class CallSession:
             return _EMPTY
         self.stats["frames"] += 1
         pcm16k = self.resampler.process(to_float32(mulaw_decode(payload)))
-        for segment in self.segmenter.push(pcm16k):
-            self._enqueue(segment)
+        if self.analyse:
+            for segment in self.segmenter.push(pcm16k):
+                self._enqueue(segment)
         return pcm16k
 
     def _enqueue(self, segment: np.ndarray) -> None:

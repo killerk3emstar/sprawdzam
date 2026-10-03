@@ -19,6 +19,7 @@ from fastapi import APIRouter, WebSocket
 from app.calls.sender import SafeSender
 from app.logging_setup import log_event
 from app.relay import protocol
+from app.relay.device import DeviceSettings, InvalidSettings
 from app.relay.protocol import BadAppMessage, EndReason, parse_app_message
 from app.services import get_services
 
@@ -56,12 +57,25 @@ async def control_channel(ws: WebSocket) -> None:
             if text is None:
                 continue  # binary frames have no meaning on the control channel
             try:
-                message = parse_app_message(text)
+                message = parse_app_message(text, protocol.MAX_CONTROL_TEXT_CHARS)
             except BadAppMessage as exc:
                 log_event(logger, logging.WARNING, "app_control_bad_message", reason=str(exc))
+                if '"settings"' in text:
+                    await sender.send_json(protocol.settings_ack(False, error=str(exc)))
                 continue
             if isinstance(message, protocol.Ping):
                 await sender.send_json(protocol.pong())
+            elif isinstance(message, protocol.SettingsMessage):
+                try:
+                    settings = DeviceSettings.from_message(message)
+                except InvalidSettings as exc:
+                    log_event(logger, logging.WARNING, "app_settings_rejected", reason=str(exc))
+                    await sender.send_json(protocol.settings_ack(False, error=str(exc)))
+                    continue
+                hub.apply_settings(settings)
+                await sender.send_json(
+                    protocol.settings_ack(True, len(settings.whitelist), settings.ignored)
+                )
     finally:
         hub.remove_control(sender)
         log_event(logger, logging.INFO, "app_control_disconnected", connections=hub.control_count)

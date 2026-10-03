@@ -50,7 +50,7 @@ async def create_dev_call(body: DevCallRequest, request: Request) -> JSONRespons
     services = get_services(request)
     if not services.voice_rate_limiter.allow():
         return JSONResponse({"error": "rate_limited"}, status_code=429)
-    lang: Lang = body.lang or services.settings.DEFAULT_LANG
+    lang: Lang = body.lang or services.hub.lang(services.settings.DEFAULT_LANG)
     call_id = "CA" + secrets.token_hex(16)
     result = admit_call(services, call_id, body.caller, lang)
     if result.outcome is not AdmitOutcome.ADMITTED or result.token is None:
@@ -70,6 +70,7 @@ async def create_dev_call(body: DevCallRequest, request: Request) -> JSONRespons
             "provider": services.provider.name,
             "streamPath": f"/{services.provider.name}/stream",
             "notice": PROTECTION_NOTICE[lang],
+            "trusted": services.hub.is_whitelisted(body.caller),
         },
         headers=NO_STORE,
     )

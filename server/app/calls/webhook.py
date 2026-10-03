@@ -89,12 +89,16 @@ async def incoming_call(request: Request) -> Response:
     except InvalidWebhook as exc:
         return PlainTextResponse(str(exc), status_code=400)
 
-    # TODO: per-senior language from the family panel (look up by the forwarded number).
-    lang: Lang = settings.DEFAULT_LANG
+    # Language from the senior app's settings (v0: one device per backend), else the default.
+    lang: Lang = services.hub.lang(settings.DEFAULT_LANG)
     result = admit_call(services, call.call_id, call.caller, lang)
     if result.outcome is not AdmitOutcome.ADMITTED or result.token is None:
         markup = provider.unavailable_markup(lang)
     else:
         stream_url = settings.ws_url(f"/{provider.name}/stream")
-        markup = provider.connect_markup(stream_url, lang, call.call_id, result.token)
+        # Contacts on the senior's whitelist are not analysed, so they get no notice.
+        announce = not services.hub.is_whitelisted(call.caller)
+        markup = provider.connect_markup(
+            stream_url, lang, call.call_id, result.token, announce=announce
+        )
     return Response(content=markup, media_type=provider.markup_media_type)

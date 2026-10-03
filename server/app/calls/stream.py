@@ -27,6 +27,7 @@ from app.audio.segmenter import PauseSegmenter
 from app.calls.bridge import CallBridge
 from app.calls.sender import SafeSender
 from app.logging_setup import log_event
+from app.relay.device import choose_trusted_number
 from app.relay.protocol import EndReason
 from app.services import Services, get_services
 from app.session import CallSession
@@ -251,11 +252,15 @@ class StreamHandler:
             return False
 
         lang = admitted.lang
+        # Contacts on the senior's whitelist are bridged without speech-to-text or risk
+        # analysis (CLAUDE.md: contacts are never analysed).
+        trusted = services.hub.is_whitelisted(admitted.caller)
         bridge = CallBridge(
             call_id=call_id,
             stream_id=event.stream_id,
             lang=lang,
             caller_display=mask_caller(admitted.caller),
+            trusted=trusted,
             provider=self.provider,
             provider_out=self.out,
             hub=services.hub,
@@ -264,9 +269,12 @@ class StreamHandler:
             family_password=self.settings.FAMILY_PASSWORD.get_secret_value(),
             prompts=services.prompts,
         )
-        responder = IncidentResponder(
-            bridge, services.actions, lang, self.settings.TRUSTED_PERSON_NUMBER
+        trusted_number = choose_trusted_number(
+            services.hub.device_settings,
+            self.settings.TRUSTED_PERSON_NUMBER,
+            self.settings.outbound_allowlist,
         )
+        responder = IncidentResponder(bridge, services.actions, lang, trusted_number)
         session = CallSession(
             call_sid=call_id,
             stream_sid=event.stream_id,
@@ -280,6 +288,7 @@ class StreamHandler:
                 pause_seconds=self.settings.STT_PAUSE_SECONDS,
             ),
             stt_timeout=self.settings.STT_TIMEOUT_SECONDS,
+            analyse=not trusted,
         )
         session.start()
         self.session, self.bridge = session, bridge
@@ -291,6 +300,7 @@ class StreamHandler:
             call_id=call_id,
             lang=lang,
             provider=self.provider.name,
+            trusted_caller=trusted,
         )
         await bridge.start()
         return True

@@ -64,6 +64,7 @@ class CallBridge:
         lang: Lang,
         caller_display: str,
         provider: TelephonyProvider,
+        trusted: bool = False,
         provider_out: SafeSender,
         hub: AppHub,
         accept_timeout: float = 30.0,
@@ -75,6 +76,7 @@ class CallBridge:
         self.stream_id = stream_id
         self.lang = lang
         self.caller_display = caller_display
+        self.trusted = trusted
         self.provider = provider
         self.provider_out = provider_out
         self.hub = hub
@@ -108,7 +110,9 @@ class CallBridge:
     async def start(self) -> None:
         token = self.hub.register(self)
         delivered = await self.hub.broadcast(
-            protocol.incoming_call(self.call_id, token, self.caller_display, self.lang)
+            protocol.incoming_call(
+                self.call_id, token, self.caller_display, self.lang, trusted=self.trusted
+            )
         )
         log_event(
             logger,

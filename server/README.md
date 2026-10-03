@@ -135,6 +135,12 @@ account before relying on it:
 
 ## Senior app relay (protocol v0)
 
+Settings from the app (`settings` on the control channel, see the protocol): `lang` sets the
+language of the next calls; calls from numbers on the `whitelist` are bridged without the
+notice, speech-to-text or risk analysis (`incoming_call.trusted = true`); `trustedPerson`
+becomes the alert target only if it is on `OUTBOUND_ALLOWLIST`, otherwise
+`TRUSTED_PERSON_NUMBER` is used. Settings live in RAM only and are logged as counts.
+
 Connecting the HarmonyOS app (emulator) in development: run the backend on 8765, forward the
 port with `hdc rport tcp:8765 tcp:8765`, and use the same device token in the app and in
 `../.env` (`APP_DEVICE_TOKEN`, at least 16 characters, e.g. `dev-device-1-sprawdzam`; the

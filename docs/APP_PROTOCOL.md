@@ -1,6 +1,7 @@
 # App protocol v0 (backend ⇄ senior app)
 
-Status: **v0**, implemented by the backend in `server/app/relay/`. The senior app (React Native,
+Status: **v0** (+ `settings`, `settings_ack`, `incoming_call.trusted`), implemented by the
+backend in `server/app/relay/`. The senior app (React Native,
 HarmonyOS + Android) and the browser stand-in `/dev/senior` implement the client side.
 Changes to this document must be agreed by both sides.
 
@@ -58,12 +59,21 @@ shuts down. While the control channel is closed or reconnecting, the app shows
 **"protection unavailable"**.
 
 ```json
-{"type": "incoming_call", "callId": "CA1f…", "token": "pK3…", "caller": "+48 *** *** 123", "lang": "pl"}
+{"type": "incoming_call", "callId": "CA1f…", "token": "pK3…", "caller": "+48 *** *** 123", "lang": "pl", "trusted": false}
 ```
 A protected call has reached the backend. `token` is single use and valid for **5 minutes**
 (it opens the call channel once). `caller` is a masked number for display only (`"unknown"`
-when the number is hidden). `lang` is `"pl"` or `"en"`. The app should open the call channel
-**immediately** (before the senior answers) and show the ringing screen.
+when the number is hidden). `lang` is `"pl"` or `"en"`. `trusted` is `true` when the caller
+is on the senior's whitelist (see `settings`): such a call is bridged without speech-to-text
+or risk analysis, so no `risk` events follow; show a normal call screen. The app should open
+the call channel **immediately** (before the senior answers) and show the ringing screen.
+
+```json
+{"type": "settings_ack", "accepted": true, "whitelist": 312, "ignored": 2}
+{"type": "settings_ack", "accepted": false, "error": "trustedPerson.number is not an E.164 number"}
+```
+Answer to `settings`. `whitelist` = numbers accepted, `ignored` = whitelist entries dropped
+because they were not valid E.164 numbers. On `accepted: false` the previous settings stay.
 
 ```json
 {"type": "pong"}
@@ -77,6 +87,29 @@ Answer to `ping`.
 ```
 Every **15 s**. The backend closes the control channel with **4000** if it receives no message
 for **45 s**. The app reconnects with backoff (e.g. 1 s, 2 s, 5 s, then every 10 s).
+
+```json
+{"type": "settings", "lang": "pl", "trustedPerson": {"name": "Anna", "number": "+48600100200"}, "whitelist": ["+48600100200", "+48500300400"]}
+```
+The senior's settings. Send them right after the control channel opens and again whenever
+they change; each message **replaces** the previous settings completely.
+
+- `lang` (required): `"pl"` or `"en"`, used for speech recognition, the risk-model questions,
+  voice prompts and the protection notice of the following calls.
+- `trustedPerson` (optional or `null`): `name` (≤ 80 characters, display only) and `number`
+  in E.164 (`+48…`; spaces and dashes are removed). The backend calls and texts this number
+  when it blocks a scam, **but only if the number is also on the backend's
+  `OUTBOUND_ALLOWLIST`** (so a compromised app cannot make the backend call arbitrary
+  numbers); otherwise it uses its own configured trusted person, if any.
+- `whitelist` (optional, ≤ 2000 entries): the senior's contacts in E.164. Calls from these
+  numbers are bridged without the protection notice, speech-to-text or risk analysis and
+  arrive with `"trusted": true`. Normalise local numbers to E.164 in the app; invalid entries
+  are skipped and counted in `settings_ack.ignored`.
+
+The backend keeps settings in memory only (lost on restart, so always resend after
+connecting) and never logs numbers or names, only counts. v0 has one senior device per
+backend: the last `settings` from any control connection wins. The whole text frame may be up
+to 128 KiB.
 
 ## 2. Call channel
 
@@ -162,9 +195,11 @@ resume in v0.
 ```
 app → GET wss://host/app/control?device_token=…           (open)
 be  → {"type":"protection_status","available":true}
+app → {"type":"settings","lang":"pl","trustedPerson":{"name":"Anna","number":"+48600100200"},"whitelist":["+48600100200"]}
+be  → {"type":"settings_ack","accepted":true,"whitelist":1,"ignored":0}
 app → {"type":"ping"}            be → {"type":"pong"}        (every 15 s)
       … a forwarded call arrives …
-be  → {"type":"incoming_call","callId":"CA9f…","token":"pK3…","caller":"+48 *** *** 123","lang":"pl"}
+be  → {"type":"incoming_call","callId":"CA9f…","token":"pK3…","caller":"+48 *** *** 123","lang":"pl","trusted":false}
 app → GET wss://host/app/call/CA9f…?token=pK3…            (open)
 app → {"type":"accept"}
 be ⇄ app  binary audio frames (640 bytes, 20 ms)
@@ -183,3 +218,4 @@ be  → {"type":"call_ended","reason":"scam_blocked"}       (socket closed, 1000
 - The call token is short-lived and single use; the device token is long-lived and must be
   stored in the platform's secure storage (HarmonyOS Asset Store Kit, Android Keystore).
 - No audio or transcript is stored by the backend; risk events carry categories and scores only.
+- Settings (trusted person, whitelist) live only in the backend's memory and are never logged.

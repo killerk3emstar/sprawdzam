@@ -117,6 +117,7 @@ def test_incoming_call_reaches_real_control_channel(make_client):
                 "token": incoming["token"],
                 "caller": "+48 *** *** 001",
                 "lang": "pl",
+                "trusted": False,
             }
             assert len(incoming["token"]) >= 32
             stream.send_json(stop_message())
