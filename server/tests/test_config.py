@@ -35,6 +35,9 @@ def test_ws_url():
         {"TWILIO_NUMBER": "600000001"},
         {"PUBLIC_BASE_URL": "ftp://x"},
         {"DEFAULT_LANG": "de"},
+        {"WHISPER_URL": "localhost:8080"},
+        {"STT_MIN_SEGMENT_SECONDS": 8, "STT_MAX_SEGMENT_SECONDS": 3},
+        {"SECRECY_HANGUP_MIN": 1.5},
     ],
 )
 def test_invalid_values_rejected(values):
@@ -44,6 +47,13 @@ def test_invalid_values_rejected(values):
     for value in values.values():
         if isinstance(value, str) and len(value) > 3:
             assert value not in str(info.value)
+
+
+def test_model_defaults_and_urls():
+    settings = make()
+    assert (settings.RISK_WARN, settings.RISK_HANGUP, settings.SECRECY_HANGUP_MIN) == (50, 90, 0.8)
+    assert settings.STT_TIMEOUT_SECONDS == 3.0 and settings.DECISION_TIMEOUT_SECONDS == 3.0
+    assert make(WHISPER_URL="http://127.0.0.1:8080/").WHISPER_URL == "http://127.0.0.1:8080"
 
 
 def test_valid_relay_settings():

@@ -1,0 +1,10 @@
+{
+  "money": {"type": "noul", "instructions": "Does the caller ask for money, a bank transfer, cash handover or a BLIK code?"},
+  "secrecy": {"type": "noul", "instructions": "Does the caller ask to keep the call secret from family or the bank?"},
+  "authority": {"type": "noul", "instructions": "Does the caller claim to be police, a bank, a prosecutor or another authority?"},
+  "urgency": {"type": "noul", "instructions": "Does the caller pressure the person to act immediately?"},
+  "scam_type": {"type": "choice", "instructions": "Which scam pattern fits best?", "option_keys": "hide",
+    "criteria": {"none": "Normal conversation", "grandchild": "Relative in trouble needs money", "police": "Fake police officer or prosecutor", "bank": "Fake bank employee, account at risk", "other": "Another fraud pattern"}},
+  "risk": {"type": "score", "instructions": "How likely is this call a scam?", "option_keys": "hide",
+    "criteria": {"low": "No signs", "medium": "Some warning signs", "high": "Clear scam pattern", "critical": "Money is about to be handed over"}}
+}

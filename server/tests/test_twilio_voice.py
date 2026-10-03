@@ -159,3 +159,36 @@ def test_health_reports_app_and_provider(make_client):
     assert data["app"]["connected"] is True
     assert data["app"]["device_token_configured"] is True
     assert data["dev_tools"] is False
+
+
+def test_health_reports_models_and_prompts(make_client):
+    data = make_client().get("/health").json()
+    assert data["models"]["stt"] == {
+        "configured": False,
+        "warmup": "skipped",
+        "latency_ms": None,
+        "error": None,
+    }
+    assert data["models"]["decision"]["configured"] is False
+    assert data["risk"] == {"warn": 50, "hangup": 90, "secrecy_hangup_min": 0.8}
+    assert data["voice_prompts"]["password_pl"] is False
+
+
+def test_models_are_warmed_up_at_startup(make_client):
+    from tests.conftest import FakeDecision, FakeSTT, wait_until
+
+    class WarmSTT(FakeSTT):
+        async def warm_up(self):
+            return 12.0
+
+    class WarmDecision(FakeDecision):
+        async def warm_up(self):
+            raise ConnectionError("basal down")
+
+    client = make_client(stt=WarmSTT(), decision_backend=WarmDecision({"risk": 1}))
+    models = client.app.state.services.models
+    assert wait_until(lambda: models.items["decision"].warmup != "pending")
+    data = client.get("/health").json()["models"]
+    assert data["stt"]["warmup"] == "ok" and data["stt"]["latency_ms"] == 12
+    assert data["decision"]["warmup"] == "failed"
+    assert "basal down" in data["decision"]["error"]

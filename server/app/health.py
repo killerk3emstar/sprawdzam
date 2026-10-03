@@ -52,7 +52,13 @@ async def health(request: Request) -> dict[str, object]:
             "clef_url_configured": bool(settings.CLEF_URL),
             "timeout_seconds": settings.DECISION_TIMEOUT_SECONDS,
         },
-        "risk": {"warn": settings.RISK_WARN, "hangup": settings.RISK_HANGUP},
+        "models": services.models.as_dict(),
+        "voice_prompts": services.prompts.status(),
+        "risk": {
+            "warn": settings.RISK_WARN,
+            "hangup": settings.RISK_HANGUP,
+            "secrecy_hangup_min": settings.SECRECY_HANGUP_MIN,
+        },
         "limits": {
             **services.actions.status(),
             "trusted_person_configured": bool(settings.TRUSTED_PERSON_NUMBER),

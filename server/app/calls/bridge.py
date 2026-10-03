@@ -33,6 +33,7 @@ from app.audio.g711 import mulaw_encode
 from app.audio.resample import TWILIO_RATE, StreamResampler
 from app.calls import tones
 from app.calls.sender import SafeSender
+from app.calls.voice_prompts import PromptLibrary
 from app.config import Lang
 from app.logging_setup import log_event
 from app.relay import protocol
@@ -68,6 +69,7 @@ class CallBridge:
         accept_timeout: float = 30.0,
         verify_seconds: float = 20.0,
         family_password: str = "",
+        prompts: PromptLibrary | None = None,
     ) -> None:
         self.call_id = call_id
         self.stream_id = stream_id
@@ -79,6 +81,7 @@ class CallBridge:
         self.accept_timeout = accept_timeout
         self.verify_seconds = verify_seconds
         self._family_password = family_password
+        self.prompts = prompts
 
         self.state = CallState.RINGING
         self.ended = asyncio.Event()
@@ -97,6 +100,9 @@ class CallBridge:
         self._dtmf = ""
         self._verify_future: asyncio.Future[bool] | None = None
         self.stats = {"to_app_frames": 0, "to_phone_frames": 0, "dropped_to_app": 0}
+        # While a prompt plays to one side, that side's live audio from the other is muted.
+        self._app_prompt = asyncio.Lock()
+        self._caller_prompt = asyncio.Lock()
 
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
@@ -189,6 +195,8 @@ class CallBridge:
         """Caller audio (float32, 16 kHz, from the STT resampler) towards the app."""
         if self.state is not CallState.ACTIVE or self.app is None or pcm16k.size == 0:
             return
+        if self._app_prompt.locked():
+            return  # the senior is hearing a prompt
         for frame in self._app_framer.push(float32_to_pcm16le(pcm16k)):
             self._queue_to_app(frame)
 
@@ -207,7 +215,7 @@ class CallBridge:
 
     async def on_app_audio(self, data: bytes) -> bool:
         """Senior's microphone (PCM16 LE 16 kHz) towards the caller. False if dropped."""
-        if self.state is not CallState.ACTIVE:
+        if self.state is not CallState.ACTIVE or self._caller_prompt.locked():
             return False
         if not data or len(data) > protocol.MAX_APP_AUDIO_FRAME_BYTES or len(data) % 2:
             return False
@@ -219,12 +227,63 @@ class CallBridge:
                 self.stats["to_phone_frames"] += 1
         return True
 
-    async def play_warning(self) -> None:
-        """Short warning tone for the senior (spoken warnings come with TTS assets later)."""
-        if self.app is None or self.state is CallState.ENDED:
+    # ------------------------------------------------------------------ prompts
+    def _app_prompt_frames(self, name: str) -> tuple[bytes, ...]:
+        frames = self.prompts.app_frames(name, self.lang) if self.prompts else None
+        return frames or tones.warning_frames()
+
+    def _caller_prompt_frames(self, name: str) -> tuple[bytes, ...]:
+        frames = self.prompts.phone_frames(name, self.lang) if self.prompts else None
+        return frames or tones.caller_beep_frames()
+
+    async def _paced(self, frames: tuple[bytes, ...], send) -> None:
+        """Send 20 ms frames in real time (100 ms ahead), so live audio queued after the prompt
+        does not pile up behind it."""
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        for i, frame in enumerate(frames):
+            if self.state is CallState.ENDED:
+                return
+            await send(frame)
+            delay = start + (i + 1) * 0.02 - 0.1 - loop.time()
+            if delay > 0:
+                await asyncio.sleep(delay)
+
+    async def play_to_app(self, *names: str) -> None:
+        """Play prompts to the senior; caller audio to the app is muted meanwhile."""
+        if self.app is None or self.state is not CallState.ACTIVE:
             return
-        for frame in tones.warning_frames():
-            self._queue_to_app(frame)
+        async with self._app_prompt:
+            while not self._to_app.empty():  # drop caller audio queued before the prompt
+                self._to_app.get_nowait()
+            app = self.app
+            for name in names:
+                await self._paced(self._app_prompt_frames(name), app.send_bytes)
+
+    async def play_to_caller(self, name: str) -> None:
+        """Play a prompt to the caller; the senior's audio to the caller is muted meanwhile."""
+        if self.state is CallState.ENDED:
+            return
+        if self._ringback is not None:
+            self._ringback.cancel()
+        async with self._caller_prompt:
+            await self.provider_out.send_json(self.provider.clear_message(self.stream_id))
+
+            async def send(frame: bytes) -> None:
+                await self.provider_out.send_json(
+                    self.provider.media_message(self.stream_id, frame)
+                )
+
+            await self._paced(self._caller_prompt_frames(name), send)
+
+    async def play_warning(self) -> None:
+        """Spoken warning (or beeps) for the senior, in the background."""
+        if self.app is not None and self.state is CallState.ACTIVE:
+            self._spawn(self.play_to_app("warning"))
+
+    async def play_blocked_notice(self) -> None:
+        """Tell the caller the call is being ended (played before `end`)."""
+        await self.play_to_caller("blocked")
 
     async def _ringback_loop(self) -> None:
         while True:
@@ -264,10 +323,11 @@ class CallBridge:
         if hmac.compare_digest(self._dtmf[-len(password) :].encode(), password.encode()):
             future.set_result(True)
 
-    async def verify_family_password(self) -> bool:
-        """Ask for the family password (app prompt; caller or senior types it as DTMF).
-        True if it arrives within `verify_seconds`; False on timeout, call end, or when no
-        password is configured."""
+    async def verify_family_password(self, warn_first: bool = False) -> bool:
+        """Ask for the family password: `verify_password` to the app, a spoken request to the
+        caller and the senior (the senior first hears the warning if `warn_first`). Digits
+        count from the start of the prompt; the window closes `verify_seconds` after it.
+        False on timeout, call end, or when no password is configured (then no prompt)."""
         await self.send_event(protocol.verify_password())
         if not self._family_password or self.state is CallState.ENDED:
             return False
@@ -275,7 +335,10 @@ class CallBridge:
         future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
         self._verify_future = future
         try:
-            await asyncio.wait_for(asyncio.shield(future), self.verify_seconds)
+            app_names = ("warning", "password") if warn_first else ("password",)
+            await asyncio.gather(self.play_to_caller("password"), self.play_to_app(*app_names))
+            if not future.done():
+                await asyncio.wait_for(asyncio.shield(future), self.verify_seconds)
         except TimeoutError:
             pass
         finally:

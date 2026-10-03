@@ -10,6 +10,12 @@ from typing import Literal
 
 Speaker = Literal["caller", "senior"]
 
+# Speaker tags as used in the basal bench transcripts.
+SPEAKER_LABELS: dict[str, dict[str, str]] = {
+    "pl": {"caller": "Dzwoniący", "senior": "Senior"},
+    "en": {"caller": "Caller", "senior": "Senior"},
+}
+
 
 @dataclass(frozen=True)
 class Utterance:
@@ -47,10 +53,11 @@ class TranscriptWindow:
         self._prune()
         return " ".join(u.text for u in self._items)
 
-    def render(self) -> str:
-        """Speaker-labelled lines (state for the decision model)."""
+    def render(self, lang: str = "pl") -> str:
+        """Speaker-labelled lines (state for the decision model), e.g. "Dzwoniący: ..."."""
         self._prune()
-        return "\n".join(f"{u.speaker}: {u.text}" for u in self._items)
+        labels = SPEAKER_LABELS.get(lang, SPEAKER_LABELS["en"])
+        return "\n".join(f"{labels[u.speaker]}: {u.text}" for u in self._items)
 
     def __len__(self) -> int:
         return len(self._items)

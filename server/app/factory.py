@@ -2,28 +2,35 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 
 from app import __version__
 from app.calls.stream import media_stream
+from app.calls.voice_prompts import PromptLibrary
 from app.calls.webhook import incoming_call
 from app.config import Settings, get_settings
 from app.health import router as health_router
 from app.logging_setup import configure_logging, log_event
 from app.relay.hub import AppHub
 from app.relay.routes import router as relay_router
+from app.risk.basal import BasalBackend
 from app.risk.decision import DecisionBackend
 from app.risk.engine import RiskEngine
 from app.services import Services
 from app.stt.base import NoopSTT, STTBackend
+from app.stt.whisper import WhisperSTT
 from app.telephony.actions import CallActions
 from app.telephony.admission import CallAdmission, SlidingWindowRateLimiter
 from app.telephony.guard import DailyCounterStore, GuardConfig, GuardedCallActions
 from app.telephony.provider import TelephonyProvider
 from app.twilio.provider import TwilioProvider
+from app.warmup import ModelStatus, ModelStatuses, warm_up_models
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +38,16 @@ logger = logging.getLogger(__name__)
 def build_decision_backend(settings: Settings) -> DecisionBackend | None:
     if settings.DECISION_BACKEND == "rules":
         return None
-    # The basal-1 / Clef-Flash HTTP clients are not implemented yet.
+    if settings.DECISION_BACKEND == "basal" and settings.BASAL_URL:
+        return BasalBackend(settings.BASAL_URL, timeout=settings.DECISION_TIMEOUT_SECONDS)
     log_event(
         logger,
         logging.WARNING,
-        "decision_backend_not_implemented",
+        "decision_backend_unavailable",
         configured=settings.DECISION_BACKEND,
+        reason="clef client not implemented"
+        if settings.DECISION_BACKEND == "clef"
+        else "BASAL_URL empty",
         active="rules",
     )
     return None
@@ -44,7 +55,8 @@ def build_decision_backend(settings: Settings) -> DecisionBackend | None:
 
 def build_stt(settings: Settings) -> STTBackend:
     if settings.WHISPER_URL:
-        log_event(logger, logging.WARNING, "stt_backend_not_implemented", active="noop")
+        return WhisperSTT(settings.WHISPER_URL, timeout=settings.STT_TIMEOUT_SECONDS)
+    log_event(logger, logging.WARNING, "stt_not_configured", active="noop")
     return NoopSTT()
 
 
@@ -132,14 +144,25 @@ def create_app(
     settings = settings or get_settings()
     provider = provider or TwilioProvider(settings)
     decision = decision_backend or build_decision_backend(settings)
+    stt = stt or build_stt(settings)
+    models = ModelStatuses(
+        {
+            "stt": ModelStatus(configured=not isinstance(stt, NoopSTT)),
+            "decision": ModelStatus(configured=decision is not None),
+        }
+    )
     services = Services(
         settings=settings,
         provider=provider,
         hub=AppHub(settings.APP_DEVICE_TOKEN.get_secret_value()),
-        stt=stt or build_stt(settings),
+        stt=stt,
+        models=models,
+        prompts=PromptLibrary(Path(settings.DATA_DIR) / "prompts"),
         engine=RiskEngine(
             warn_threshold=settings.RISK_WARN,
             hangup_threshold=settings.RISK_HANGUP,
+            secrecy_hangup_min=settings.SECRECY_HANGUP_MIN,
+            full_refresh_seconds=settings.DECISION_FULL_REFRESH_SECONDS,
             decision_backend=decision,
             decision_timeout_seconds=settings.DECISION_TIMEOUT_SECONDS,
         ),
@@ -153,8 +176,23 @@ def create_app(
     async def lifespan(app: FastAPI):
         configure_logging(settings.LOG_LEVEL)
         _startup_warnings(settings)
+        clients = {
+            name: client
+            for name, client in (("stt", services.stt), ("decision", decision))
+            if client is not None and models.items[name].configured
+        }
+        for name in models.items:
+            if name not in clients:
+                models.items[name].warmup = "skipped"
+        warmup = asyncio.create_task(warm_up_models(clients, models))
         yield
+        warmup.cancel()
         await services.hub.shutdown()
+        for client in clients.values():
+            close = getattr(client, "aclose", None)
+            if close is not None:
+                with contextlib.suppress(Exception):
+                    await close()
 
     app = FastAPI(
         title="Sprawdzam / Second Ear backend",

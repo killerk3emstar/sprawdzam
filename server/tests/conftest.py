@@ -51,6 +51,10 @@ def make_settings(tmp_path) -> Callable[..., Settings]:
             "TWILIO_NUMBER": "+48100000000",
             "DATA_DIR": str(tmp_path / "data"),
             "APP_DEVICE_TOKEN": DEVICE_TOKEN,
+            # Never reach the real model servers running on the dev Mac from unit tests.
+            "WHISPER_URL": "",
+            "BASAL_URL": "",
+            "DECISION_BACKEND": "rules",
         }
         values.update(overrides)
         return Settings(_env_file=None, **values)
@@ -168,6 +172,19 @@ def post_voice(client: TestClient, params: Mapping[str, str], signature: str | N
     elif signature is not None:
         headers["X-Twilio-Signature"] = signature
     return client.post("/twilio/voice", data=dict(params), headers=headers)
+
+
+def speech_mulaw_frames(
+    bursts: tuple[float, ...] = (3.5, 3.5), pause: float = 0.6, freq: float = 1000.0
+) -> list[str]:
+    """Tone bursts separated by silence, so the pause-based segmenter cuts one STT segment per
+    burst (each burst >= STT_MIN_SEGMENT_SECONDS)."""
+    frames: list[str] = []
+    silence = base64.b64encode(b"\xff" * 160).decode()
+    for seconds in bursts:
+        frames += tone_mulaw_frames(seconds, freq=freq)
+        frames += [silence] * int(pause / 0.02)
+    return frames
 
 
 def tone_mulaw_frames(seconds: float, freq: float = 1000.0, amplitude: float = 0.3) -> list[str]:

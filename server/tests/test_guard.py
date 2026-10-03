@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.risk.engine import RiskEngine
-from app.risk.models import ScamType
+from app.risk.models import Action, ScamType
 from app.telephony.guard import (
     DailyCounterStore,
     GuardConfig,
@@ -196,9 +196,12 @@ class FakeCall:
     async def play_warning(self) -> None:
         self.events.append("warning_tone")
 
-    async def verify_family_password(self) -> bool:
-        self.events.append("verify_password")
+    async def verify_family_password(self, warn_first: bool = False) -> bool:
+        self.events.append("verify_password+warning" if warn_first else "verify_password")
         return self.password_ok
+
+    async def play_blocked_notice(self) -> None:
+        self.events.append("blocked_notice")
 
     async def end(self, reason) -> None:
         self.events.append(f"end:{reason.value}")
@@ -213,21 +216,41 @@ async def test_responder_full_incident_through_guard(tmp_path):
     inner = RecordingActions()
     guard = make_guard(tmp_path, inner)
     call = FakeCall()
-    engine = RiskEngine(warn_threshold=50, hangup_threshold=80)
+    engine = RiskEngine(warn_threshold=50, hangup_threshold=90)
     monitor = engine.start_call("CA1", "pl", IncidentResponder(call, guard, "pl", TRUSTED))
     transcript = TranscriptWindow()
     transcript.add("caller", "Jestem z CBŚ, proszę przekazać gotówkę kurierowi, nikomu nie mów.")
     for _ in range(6):  # many high readings
         await monitor.evaluate(transcript)
     await asyncio.gather(*call.tasks)
+    # Straight to the password check (two readings >= 90 + rule hit); the senior hears the
+    # warning first because there was no warn step.
+    assert call.events[:2] == ["risk:none", "risk:verify_family_password_then_hangup"]
+    assert call.events.count("verify_password+warning") == 1
+    assert call.events[-2:] == ["blocked_notice", "end:scam_blocked"]
+    assert inner.kinds() == ["hang_up", "call", "sms"]
+
+
+async def test_responder_warn_then_verify_skips_second_warning(tmp_path):
+    call = FakeCall()
+    responder = IncidentResponder(call, make_guard(tmp_path, RecordingActions()), "pl", "")
+    common = {"call_id": "CA1", "scam_type": ScamType.POLICE}
+    warn = SimpleNamespace(level=Action.WARN, action=Action.WARN, smoothed_score=60, **common)
+    high = SimpleNamespace(
+        level=Action.VERIFY_THEN_HANGUP,
+        action=Action.VERIFY_THEN_HANGUP,
+        smoothed_score=95,
+        **common,
+    )
+    await responder.handle(warn)
+    await responder.handle(high)
+    await asyncio.gather(*call.tasks)
     assert call.events[:3] == [
         "risk:warn",
         "warning_tone",
         "risk:verify_family_password_then_hangup",
     ]
-    assert call.events.count("verify_password") == 1
-    assert "end:scam_blocked" in call.events
-    assert inner.kinds() == ["hang_up", "call", "sms"]
+    assert "verify_password" in call.events  # no second warning before the prompt
 
 
 async def test_responder_password_ok_clears_incident(tmp_path):
@@ -248,7 +271,7 @@ async def test_responder_without_trusted_person_only_hangs_up(tmp_path):
     await responder.verify_or_block(
         SimpleNamespace(call_id="CA1", smoothed_score=95, scam_type=ScamType.BANK)
     )
-    assert call.events == ["verify_password", "end:scam_blocked"]
+    assert call.events == ["verify_password", "blocked_notice", "end:scam_blocked"]
     assert inner.kinds() == ["hang_up"]
 
 

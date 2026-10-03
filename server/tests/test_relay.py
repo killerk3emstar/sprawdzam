@@ -20,6 +20,7 @@ from tests.conftest import (
     media,
     post_voice,
     receive_json,
+    speech_mulaw_frames,
     start_message,
     stop_message,
     tone_mulaw_frames,
@@ -243,17 +244,19 @@ def test_risk_events_and_scam_block_reach_the_app(make_client):
         incoming = start_call(client, stream)
         with client.websocket_connect(call_url(incoming)) as app_ws:
             app_ws.send_json({"type": "accept"})
-            for payload in tone_mulaw_frames(6.5):
+            for payload in speech_mulaw_frames():
                 stream.send_json(media(payload))
             messages, closing = drain_until_close(app_ws)
         events = [m for m in messages if isinstance(m, dict)]
         risks = [e for e in events if e["type"] == "risk"]
-        assert [r["level"] for r in risks] == ["warn", "high"]
-        assert risks[0]["score"] >= 50 and risks[0]["scamType"] == "police"
+        # Two readings of a clear scam: the first alone triggers nothing, the second (two in
+        # a row >= RISK_HANGUP with a rule hit) goes straight to the password check.
+        assert [r["level"] for r in risks] == ["none", "high"]
+        assert risks[0]["score"] >= 90 and risks[0]["scamType"] == "police"
         assert {"money", "secrecy", "authority"} <= set(risks[1]["reasons"])
         assert [e["type"] for e in events][-2:] == ["verify_password", "call_ended"]
         assert events[-1]["reason"] == "scam_blocked"
-        assert sum(isinstance(m, bytes) for m in messages) >= 25  # caller audio + warning tone
+        assert sum(isinstance(m, bytes) for m in messages) >= 25  # caller audio
         assert closing["code"] == 1000
         assert drain_until_close(stream)[1]["code"] == 1000
 
@@ -267,7 +270,7 @@ def test_family_password_lets_the_call_continue(make_client, make_settings, sour
         incoming = start_call(client, stream)
         with client.websocket_connect(call_url(incoming)) as app_ws:
             app_ws.send_json({"type": "accept"})
-            for payload in tone_mulaw_frames(6.5):
+            for payload in speech_mulaw_frames():
                 stream.send_json(media(payload))
             receive_json(app_ws, "verify_password")
             if source == "app":
@@ -300,7 +303,7 @@ def test_wrong_password_blocks(make_client, make_settings):
         incoming = start_call(client, stream)
         with client.websocket_connect(call_url(incoming)) as app_ws:
             app_ws.send_json({"type": "accept"})
-            for payload in tone_mulaw_frames(6.5):
+            for payload in speech_mulaw_frames():
                 stream.send_json(media(payload))
             receive_json(app_ws, "verify_password")
             app_ws.send_json({"type": "dtmf", "digits": "1111"})

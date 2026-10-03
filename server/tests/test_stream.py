@@ -15,6 +15,7 @@ from tests.conftest import (
     drain_until_close,
     media,
     post_voice,
+    speech_mulaw_frames,
     start_message,
     stop_message,
     tone_mulaw_frames,
@@ -30,7 +31,7 @@ def test_full_stream_flow_blocks_scam_with_malformed_messages(make_client, caplo
     client = make_client(stt=stt, inner_actions=inner)
     services = client.app.state.services
     token = admit(client)
-    frames = tone_mulaw_frames(6.5)  # two full 3 s windows
+    frames = speech_mulaw_frames((3.5, 3.5))  # two utterances -> two STT segments
 
     with client.websocket_connect("/twilio/stream") as ws:
         ws.send_json({"event": "connected", "protocol": "Call", "version": "1.0.0"})
@@ -55,15 +56,17 @@ def test_full_stream_flow_blocks_scam_with_malformed_messages(make_client, caplo
         )
         for payload in frames[100:]:
             ws.send_json(media(payload))
-        # Window 1 -> warning, window 2 -> sustained high risk -> no family password
-        # configured -> scam blocked -> the backend closes the stream (provider hangs up).
+        # Segment 1 -> first high reading, segment 2 -> sustained high risk + rule hit -> no
+        # family password configured -> scam blocked -> the backend closes the stream.
         messages, closing = drain_until_close(ws)
 
     assert closing["code"] == 1000
-    ringback = [m for m in messages if m["event"] == "media"]
-    assert len(ringback) == 50  # one 1 s ringback burst while nobody answered
-    assert [c[:3] for c in stt.calls] == [(48000, 16000, "pl"), (48000, 16000, "pl")]
-    assert all(str(c[3]) == "float32" for c in stt.calls)
+    media_out = [m for m in messages if m["event"] == "media"]
+    assert len(media_out) >= 50  # ringback while nobody answered (+ the blocked notice)
+    assert len(stt.calls) == 2
+    for size, rate, lang, dtype in stt.calls:
+        assert rate == 16000 and lang == "pl" and str(dtype) == "float32"
+        assert 3.5 <= size / 16000 <= 4.2  # one utterance incl. pre-roll / trailing pause
     # The app was told about the call.
     (incoming,) = client.control.of_type("incoming_call")
     assert incoming["callId"] == CALL_SID and incoming["caller"] == "+48 *** *** 001"
@@ -184,7 +187,7 @@ def test_stt_failure_keeps_call_running(make_client, caplog):
     token = admit(client)
     with client.websocket_connect("/twilio/stream") as ws:
         ws.send_json(start_message(token))
-        for payload in tone_mulaw_frames(3.2):
+        for payload in speech_mulaw_frames((3.5,)):
             ws.send_json(media(payload))
         ws.send_json(stop_message())
         assert drain_until_close(ws)[1]["code"] == 1000

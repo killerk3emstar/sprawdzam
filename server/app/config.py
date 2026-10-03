@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Public base URL of the backend (tunnel or AWS). Used to build the <Stream> URL and to
     # reconstruct the exact URL Twilio signed, because the app runs behind a proxy.
-    PUBLIC_BASE_URL: str = "http://localhost:8000"
+    PUBLIC_BASE_URL: str = "http://localhost:8765"
 
     # Twilio
     TWILIO_ACCOUNT_SID: str = ""
@@ -45,21 +45,29 @@ class Settings(BaseSettings):
     # is configured. Never enable in production.
     ALLOW_UNSIGNED_WEBHOOKS: bool = False
 
-    # Self-hosted model endpoints
+    # Self-hosted model endpoints (empty = not used). Native run on the Mac:
+    # http://127.0.0.1:8080 (whisper-server) and http://127.0.0.1:8000 (basal-serve).
     WHISPER_URL: str = ""
     DECISION_BACKEND: DecisionBackendName = "rules"
     BASAL_URL: str = ""
     CLEF_URL: str = ""
-    DECISION_TIMEOUT_SECONDS: float = Field(default=2.0, gt=0, le=30)
+    DECISION_TIMEOUT_SECONDS: float = Field(default=3.0, gt=0, le=30)
+    # 0 = ask basal's full six questions once per call. > 0 = re-ask at most this often while
+    # the hang-up gate is blocked only by a stale (low) secrecy answer.
+    DECISION_FULL_REFRESH_SECONDS: float = Field(default=0.0, ge=0, le=600)
     HF_TOKEN: SecretStr = SecretStr("")
 
-    # Audio pipeline
-    STT_WINDOW_SECONDS: float = Field(default=3.0, ge=1.0, le=10.0)
-    STT_TIMEOUT_SECONDS: float = Field(default=8.0, gt=0, le=60)
+    # Audio pipeline: pause-based speech segments sent to speech-to-text
+    STT_MIN_SEGMENT_SECONDS: float = Field(default=3.0, ge=0.5, le=10.0)
+    STT_MAX_SEGMENT_SECONDS: float = Field(default=8.0, ge=1.0, le=25.0)
+    STT_PAUSE_SECONDS: float = Field(default=0.2, ge=0.1, le=2.0)
+    STT_TIMEOUT_SECONDS: float = Field(default=3.0, gt=0, le=60)
 
-    # Risk thresholds (0-100)
+    # Risk thresholds (0-100); warn and hang-up each need two readings in a row
     RISK_WARN: int = Field(default=50, ge=0, le=100)
-    RISK_HANGUP: int = Field(default=80, ge=0, le=100)
+    RISK_HANGUP: int = Field(default=90, ge=0, le=100)
+    # Hang-up also needs the model's secrecy probability >= this, or a keyword-rule hit.
+    SECRECY_HANGUP_MIN: float = Field(default=0.8, ge=0.0, le=1.0)
 
     # Language used for voice prompts and speech recognition until per-senior settings exist
     DEFAULT_LANG: Lang = "pl"
@@ -144,10 +152,20 @@ class Settings(BaseSettings):
         parse_number_list(value)  # raises ValueError on a malformed entry
         return value
 
+    @field_validator("WHISPER_URL", "BASAL_URL", "CLEF_URL")
+    @classmethod
+    def _check_model_url(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if value and not value.startswith(("http://", "https://")):
+            raise ValueError("model URLs must start with http:// or https://")
+        return value
+
     @model_validator(mode="after")
     def _check_thresholds(self) -> Settings:
         if self.RISK_WARN >= self.RISK_HANGUP:
             raise ValueError("RISK_WARN must be lower than RISK_HANGUP")
+        if self.STT_MIN_SEGMENT_SECONDS >= self.STT_MAX_SEGMENT_SECONDS:
+            raise ValueError("STT_MIN_SEGMENT_SECONDS must be lower than STT_MAX_SEGMENT_SECONDS")
         return self
 
     @property

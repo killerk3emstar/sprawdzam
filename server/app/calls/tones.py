@@ -41,3 +41,12 @@ def warning_frames() -> tuple[bytes, ...]:
     gap = np.zeros(int(0.1 * APP_RATE), dtype=np.float32)
     audio = np.concatenate([beep, gap, beep, gap])
     return tuple(Framer(APP_FRAME_BYTES).push(float32_to_pcm16le(audio)))
+
+
+@cache
+def caller_beep_frames() -> tuple[bytes, ...]:
+    """The warning beeps as 20 ms mu-law 8 kHz frames (fallback prompt for the caller)."""
+    beep = _tone(880.0, 0.15, TWILIO_RATE, 0.3)
+    gap = np.zeros(int(0.1 * TWILIO_RATE), dtype=np.float32)
+    mulaw = mulaw_encode(np.concatenate([beep, gap, beep, gap]))
+    return tuple(mulaw[i : i + 160] for i in range(0, len(mulaw), 160))

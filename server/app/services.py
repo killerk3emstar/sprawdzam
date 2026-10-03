@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from fastapi import Request
 from starlette.requests import HTTPConnection
 
+from app.calls.voice_prompts import PromptLibrary
 from app.config import Settings
 from app.relay.hub import AppHub
 from app.risk.engine import RiskEngine
@@ -15,6 +16,7 @@ from app.stt.base import STTBackend
 from app.telephony.admission import CallAdmission, SlidingWindowRateLimiter
 from app.telephony.guard import GuardedCallActions
 from app.telephony.provider import TelephonyProvider
+from app.warmup import ModelStatuses
 
 
 @dataclass
@@ -23,6 +25,8 @@ class Services:
     provider: TelephonyProvider
     hub: AppHub
     stt: STTBackend
+    models: ModelStatuses
+    prompts: PromptLibrary
     engine: RiskEngine
     actions: GuardedCallActions
     admission: CallAdmission

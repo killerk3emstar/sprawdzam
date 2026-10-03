@@ -22,6 +22,8 @@ import logging
 
 from fastapi import WebSocket
 
+from app.audio.resample import STT_RATE
+from app.audio.segmenter import PauseSegmenter
 from app.calls.bridge import CallBridge
 from app.calls.sender import SafeSender
 from app.logging_setup import log_event
@@ -260,6 +262,7 @@ class StreamHandler:
             accept_timeout=self.settings.APP_ACCEPT_TIMEOUT_SECONDS,
             verify_seconds=self.settings.VERIFY_PASSWORD_SECONDS,
             family_password=self.settings.FAMILY_PASSWORD.get_secret_value(),
+            prompts=services.prompts,
         )
         responder = IncidentResponder(
             bridge, services.actions, lang, self.settings.TRUSTED_PERSON_NUMBER
@@ -270,7 +273,12 @@ class StreamHandler:
             lang=lang,
             stt=services.stt,
             monitor=services.engine.start_call(call_id, lang, responder),
-            window_seconds=self.settings.STT_WINDOW_SECONDS,
+            segmenter=PauseSegmenter(
+                STT_RATE,
+                min_seconds=self.settings.STT_MIN_SEGMENT_SECONDS,
+                max_seconds=self.settings.STT_MAX_SEGMENT_SECONDS,
+                pause_seconds=self.settings.STT_PAUSE_SECONDS,
+            ),
             stt_timeout=self.settings.STT_TIMEOUT_SECONDS,
         )
         session.start()

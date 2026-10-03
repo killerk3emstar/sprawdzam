@@ -38,17 +38,43 @@ _SCAM_NAMES: dict[Lang, dict[ScamType, str]] = {
 }
 
 
+_SIGNAL_NAMES: dict[Lang, dict[str, str]] = {
+    "pl": {
+        "money": "pieniądze",
+        "secrecy": "tajemnica",
+        "authority": "podszywanie się pod urząd",
+        "urgency": "presja czasu",
+    },
+    "en": {
+        "money": "money",
+        "secrecy": "secrecy",
+        "authority": "fake authority",
+        "urgency": "time pressure",
+    },
+}
+
+
+def _signals(assessment: RiskAssessment, lang: Lang) -> str:
+    categories = getattr(assessment, "categories", {}) or {}
+    names = [_SIGNAL_NAMES[lang][name] for name, on in categories.items() if on]
+    return ", ".join(names)
+
+
 def alert_sms(assessment: RiskAssessment, lang: Lang) -> str:
     pattern = _SCAM_NAMES[lang][assessment.scam_type]
     score = assessment.smoothed_score
+    signals = _signals(assessment, lang)
     if lang == "pl":
+        extra = f", sygnały: {signals}" if signals else ""
         return (
             f"Sprawdzam: zatrzymaliśmy podejrzane połączenie do Twojej bliskiej osoby "
-            f"(ryzyko {score}/100, wzorzec: {pattern}). Zadzwoń do niej z własnego telefonu."
+            f"(ryzyko {score}/100, wzorzec: {pattern}{extra}). "
+            f"Zadzwoń do niej z własnego telefonu."
         )
+    extra = f", signals: {signals}" if signals else ""
     return (
         f"Second Ear: we stopped a suspicious call to your relative "
-        f"(risk {score}/100, pattern: {pattern}). Please call them yourself."
+        f"(risk {score}/100, pattern: {pattern}{extra}). Please call them yourself."
     )
 
 
@@ -72,7 +98,9 @@ class CallControl(Protocol):
 
     async def play_warning(self) -> None: ...
 
-    async def verify_family_password(self) -> bool: ...
+    async def verify_family_password(self, warn_first: bool = False) -> bool: ...
+
+    async def play_blocked_notice(self) -> None: ...
 
     async def end(self, reason: EndReason) -> None: ...
 
@@ -83,10 +111,12 @@ class IncidentResponder:
     """Engine `ActionHandler` for one call.
 
     * every assessment -> `risk` event to the senior's app
-    * warn -> warning tone in the app
-    * high -> family-password check; if it fails: end the call (`scam_blocked`, closing the
-      media stream ends the phone call), REST hang-up as a backup, then call and SMS the
-      trusted person. All spending goes through `GuardedCallActions`.
+    * warn -> spoken warning (or beeps) for the senior
+    * high -> family-password check (spoken request to both sides; the senior hears the
+      warning first if there was none yet); if it fails: spoken notice to the caller, end the
+      call (`scam_blocked`; closing the media stream ends the phone call), REST hang-up as a
+      backup, then call and SMS the trusted person. Spending goes through
+      `GuardedCallActions`.
     """
 
     def __init__(
@@ -96,18 +126,22 @@ class IncidentResponder:
         self.actions = actions
         self.lang = lang
         self.trusted_number = trusted_number
+        self.warned = False
 
     async def handle(self, assessment: RiskAssessment) -> None:
         await self.call.send_risk(assessment)
         if assessment.action is Action.WARN:
+            self.warned = True
             await self.call.play_warning()
         elif assessment.action is Action.VERIFY_THEN_HANGUP:
+            warn_first = not self.warned
+            self.warned = True
             # In the background: the password wait must not stall speech recognition.
-            self.call.spawn_background(self.verify_or_block(assessment))
+            self.call.spawn_background(self.verify_or_block(assessment, warn_first))
 
-    async def verify_or_block(self, assessment: RiskAssessment) -> None:
+    async def verify_or_block(self, assessment: RiskAssessment, warn_first: bool = False) -> None:
         call_id = assessment.call_id
-        if await self.call.verify_family_password():
+        if await self.call.verify_family_password(warn_first):
             log_event(logger, logging.INFO, "incident_cleared_by_password", call_id=call_id)
             return
         log_event(
@@ -118,6 +152,7 @@ class IncidentResponder:
             score=assessment.smoothed_score,
             scam_type=assessment.scam_type.value,
         )
+        await self._step("blocked_notice", self.call.play_blocked_notice(), call_id)
         await self._step("end_call", self.call.end(EndReason.SCAM_BLOCKED), call_id)
         await self._step("hang_up", self.actions.hang_up(call_id), call_id)
         if not self.trusted_number:
