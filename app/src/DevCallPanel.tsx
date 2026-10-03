@@ -16,8 +16,9 @@ import {
   type RiskUpdate,
 } from './native/CallEngine';
 
-// Fake/dev backend reached through `hdc rport tcp:8000 tcp:8000`. Production uses wss://.
-const DEFAULT_CONTROL_URL = 'ws://127.0.0.1:8000/app/control';
+// Dev backend reached through `hdc rport tcp:8765 tcp:8765` (port 8000 is taken by basal-serve on the dev Mac).
+// Production uses wss://.
+const DEFAULT_CONTROL_URL = 'ws://127.0.0.1:8765/app/control';
 const DEFAULT_DEVICE_TOKEN = 'dev-device-1';
 const MAX_LOG = 8;
 

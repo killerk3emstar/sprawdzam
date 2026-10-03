@@ -9,9 +9,13 @@ import { RNAbility } from '@rnoh/react-native-openharmony';
 import { AbilityConstant, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AudioSpikeOptions, audioSpikeOptionsFromWant, runAudioSpike } from '../callengine/AudioSpike';
+import { CallSpikeOptions, callSpikeOptionsFromWant, runCallSpike } from '../callengine/CallSpike';
 
+// Debug-only launch hooks (see callengine/AudioSpike.ets and callengine/CallSpike.ets):
+//   aa start ... --ps spike audio|beep|call
 export default class EntryAbility extends RNAbility {
   private pendingAudioSpike: AudioSpikeOptions | null = null;
+  private pendingCallSpike: CallSpikeOptions | null = null;
 
   override getPagePath() {
     return 'pages/Index';
@@ -24,6 +28,7 @@ export default class EntryAbility extends RNAbility {
   override onCreate(want: Want, launchParam?: AbilityConstant.LaunchParam) {
     super.onCreate(want, launchParam);
     this.pendingAudioSpike = audioSpikeOptionsFromWant(want);
+    this.pendingCallSpike = callSpikeOptionsFromWant(want);
   }
 
   override onWindowStageCreate(windowStage: window.WindowStage) {
@@ -31,9 +36,15 @@ export default class EntryAbility extends RNAbility {
     const opts = this.pendingAudioSpike;
     this.pendingAudioSpike = null;
     if (opts !== null) {
-      // Debug-only hook: `aa start ... --ps spike audio` (see callengine/AudioSpike.ets).
       setTimeout(() => {
         runAudioSpike(this.context, opts);
+      }, 1500);
+    }
+    const callOpts = this.pendingCallSpike;
+    this.pendingCallSpike = null;
+    if (callOpts !== null) {
+      setTimeout(() => {
+        runCallSpike(callOpts);
       }, 1500);
     }
   }
@@ -43,6 +54,10 @@ export default class EntryAbility extends RNAbility {
     const opts = audioSpikeOptionsFromWant(want);
     if (opts !== null) {
       runAudioSpike(this.context, opts);
+    }
+    const callOpts = callSpikeOptionsFromWant(want);
+    if (callOpts !== null) {
+      runCallSpike(callOpts);
     }
   }
 }
