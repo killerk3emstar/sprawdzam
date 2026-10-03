@@ -1,0 +1,55 @@
+# Secrets and signing material (never commit)
+.env
+.env.*
+!.env.example
+*.p12
+*.cer
+*.p7b
+*.keystore
+*.jks
+signing/
+
+# Third-party reference material without a license for redistribution
+.claude/skills/
+reference/
+
+# Local agent settings (per machine)
+.claude/settings.local.json
+
+# Node / React Native
+node_modules/
+.metro-health-check*
+*.log
+
+# HarmonyOS / DevEco
+oh_modules/
+.hvigor/
+.idea/
+build/
+.cxx/
+local.properties
+**/entry/src/main/resources/rawfile/bundle.harmony.js
+*.hap
+*.app
+
+# Android
+.gradle/
+**/android/app/build/
+*.apk
+*.aab
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Models and audio (large / private)
+models/
+*.gguf
+*.safetensors
+*.wav
+*.mp3
+
+# OS
+.DS_Store

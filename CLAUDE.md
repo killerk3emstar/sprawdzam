@@ -1,0 +1,205 @@
+# Sprawdzam / Second Ear — instrukcje dla Claude Code
+
+Hackathon HackYeah 2026 (Kraków, 3–4.10.2026). Dwie osoby, 24 h. Ten plik opisuje, **co budujemy, jakie decyzje już zapadły i jak z nami pracować**. Czytaj go na początku każdej sesji.
+
+Pełny plan dla ludzi (Claude Docs, nie otworzysz go z terminala): https://claude.ai/code/artifact/015c37c5-a70b-43ec-9dff-73d17d380d4b
+
+## Jak z nami pracujesz
+
+- **Rozmawiasz z nami po polsku.** Kod, komentarze, README, dokumentacja i commity są po angielsku, bo Huawei ocenia wszystko po angielsku. Teksty w UI są w dwóch językach (PL i EN).
+- **Pytaj, gdy coś jest niejasne.** Przed większym krokiem (nowy moduł, zmiana architektury, nowa zależność, decyzja o UI) daj krótki plan i zbierz pytania w jednym miejscu. Do każdego pytania dodaj 2–3 opcje i swoją rekomendację.
+- **Proponuj lepsze rozwiązania i mów o ryzykach.** Chcemy Twoich sugestii. Decyzji z sekcji „Decyzje” nie zmieniaj jednak bez naszej zgody: zaproponuj zmianę i poczekaj na odpowiedź.
+- **Drobiazgi decydujesz sam.** Nazwy, struktura plików, drobne biblioteki i odwracalne szczegóły nie wymagają pytania.
+- **Limit czasu.** Jeśli coś blokuje dłużej niż ok. 30 minut, przerwij i opisz sytuację: co próbowałeś, co widać w logach, jakie są opcje (plan B jest w tabeli ryzyk niżej).
+- **Nie przesadzaj z „działa”.** Piszesz „sprawdzone” tylko wtedy, gdy coś faktycznie uruchomiłeś. Wieloetapowe klikanie po emulatorze zostaw nam: daj krótką instrukcję testu, a my opiszemy wynik.
+- **Na koniec każdego zadania:** co zmieniłeś, co sprawdziłeś, czego nie sprawdziłeś, co zostaje do zrobienia lub zdecydowania po naszej stronie.
+
+## Co budujemy
+
+Ochrona seniorów przed oszustwami telefonicznymi („na wnuczka”, „na policjanta”, „na pracownika banku”). W 2023 roku policja odnotowała ponad 14 tys. takich oszustw, większość ofiar ma ponad 70 lat (Kwartalnik Policyjny 4/2025).
+
+- Połączenia od kontaktów dzwonią normalnie i nikt ich nie analizuje.
+- Numer spoza kontaktów: telefon go odrzuca, operator przekierowuje go („gdy zajęte”) do naszej usługi w chmurze. Dzwoniący słyszy komunikat o ochronie, a senior odbiera rozmowę w naszej apce (VoIP przez nasz backend).
+- Backend zamienia mowę na tekst i na bieżąco ocenia ryzyko. Ryzyko średnie: ostrzeżenie głosowe i powiadomienie. Ryzyko wysokie: pytanie o hasło rodzinne, rozłączenie, telefon i SMS do osoby zaufanej, alert w panelu rodziny.
+- Nie zapisujemy audio ani transkrypcji, tylko krótkie streszczenie alertu. Nie rozpoznajemy emocji ani biometrii głosu (AI Act: rozpoznawanie emocji z głosu to system wysokiego ryzyka).
+
+Zgłaszamy jeden projekt do dwóch zadań:
+
+- **Huawei „Imagine What's Next”** (25 tys. zł): aplikacja na HarmonyOS/OpenHarmony z API 20+, paczka .hap, angielski. Pełne wymagania: `reference/challenges/huawei_challenge.md`.
+- **Defence** (8 tys. zł): PL albo EN, PDF z maks. 10 slajdami. Kryteria: pomysł 30%, zgodność z kategorią 20%, użyteczność 20%, design 20%, kompletność 10%. Szczegóły: `reference/challenges/defence.md`.
+
+Kryteria Huawei: oryginalność 20%, użyteczność 20%, wykonanie techniczne 20% (działa, testy, obsługa błędów, brak sekretów), **użycie możliwości platformy 20%** (apka, która działa wszędzie tak samo, dostaje tu mniej), demo 10%, odtwarzalność i przejrzystość pracy z AI 10%.
+
+## Decyzje (nie zmieniaj bez pytania)
+
+| Temat | Decyzja |
+| --- | --- |
+| Apka | React Native **0.77.1** + RNOH **0.77.75** (`@react-native-oh/react-native-harmony`, `@react-native-oh/react-native-harmony-cli`). Jeden kod na Androida i HarmonyOS |
+| Funkcje systemowe | Moduły natywne (TurboModules): ArkTS na HarmonyOS, Kotlin na Androidzie |
+| Wersje SDK HarmonyOS | `compatibleSdkVersion` = `6.0.0(20)` (minimum wymagane przez Huawei, nie obniżać), kompilacja i cel API 24 (`6.1.1(24)`), emulator z najnowszym obrazem |
+| Plan B dla RNOH | Jeśli do soboty 23:00 „hello world” z RN nie działa na emulatorze HarmonyOS: apka Huawei w ArkTS, Android zostaje w RN. Decyzję podejmujemy razem |
+| Backend | Python, FastAPI, WebSockety |
+| Mowa na tekst | Whisper large-v3-turbo (whisper.cpp), na Macu natywnie. Język wymuszony z ustawień seniora (PL albo EN) |
+| Ocena ryzyka | **basal-1.0-4.5B** (`Remek/basal-1.0-4.5B`, polski model decyzyjny na bazie Bielika, Apache 2.0) + reguły słów kluczowych. Clef-Flash (`Cloudflare/clef-flash`) do porównania, głównie po angielsku. Zapas na CPU: embeddingi `PKOBP/embed-modernbert-68m` + regresja logistyczna |
+| Telefonia | Twilio, dwukierunkowe Media Streams (`<Connect><Stream>`). Polski numer: Zadarma (przekierowanie na SIP → Twilio SIP Domain) albo numer Twilio PL; numer z USA tylko awaryjnie |
+| Testy połączeń w trakcie budowy | Z przeglądarki (Twilio Voice JS SDK), żeby nie płacić operatorowi; z telefonu tylko test przekierowania i demo |
+| Wdrożenie | docker compose. Na Macu modele działają natywnie (Docker na Macu nie daje kontenerom GPU), backend w kontenerze łączy się z nimi przez `host.docker.internal`. Na AWS jedna maszyna EC2 + Caddy z automatycznym HTTPS |
+| Języki | PL i EN wszędzie: UI, komunikaty głosowe, rozpoznawanie mowy, reguły, scenariusze testowe |
+
+## Architektura
+
+```
+Dzwoniący ──► telefon seniora (odrzuca nieznany numer) ──► operator przekierowuje
+     ──► numer (Twilio / Zadarma→SIP→Twilio) ──► komunikat o ochronie
+     ──► <Connect><Stream> wss:// ──► backend FastAPI
+            ├─ audio μ-law 8 kHz → 16 kHz → VAD (Silero) → Whisper (kawałki 2–4 s)
+            ├─ ocena: basal-1 (schemat pytań) + reguły → wynik wygładzony
+            ├─ akcje: ostrzeżenie, hasło rodzinne, rozłączenie (Twilio REST), telefon + SMS do osoby zaufanej
+            └─ przekazywanie dźwięku w obie strony: Twilio ⇄ WS /app/{callId} ⇄ apka seniora
+     panel rodziny (web) ◄── alerty, ustawienia, hasło rodzinne
+```
+
+### Moduły natywne
+
+| Moduł | HarmonyOS (ArkTS) | Android (Kotlin) | Po co |
+| --- | --- | --- | --- |
+| CallEngine | WebSocket + AudioCapturer i AudioRenderer w trybie rozmowy | AudioRecord i AudioTrack | Dźwięk rozmowy z backendu i z powrotem |
+| Ekran połączenia | Call Service Kit (voipCall), jeśli działa na emulatorze | Ekran w apce | Rozmowa wygląda jak zwykłe połączenie |
+| Filtr połączeń | Brak (odrzucanie to API systemowe), więc przekierowanie bezwarunkowe + biała lista w chmurze | CallScreeningService | Odrzucanie numerów spoza kontaktów |
+| Kontakty | Contacts Kit | ContactsContract | Biała lista, wybór osoby zaufanej |
+| Alerty | Notification Kit | NotificationManager | Ostrzeżenie na ekranie |
+| Widżet | Karta na ekranie głównym (FormExtensionAbility) | Opcjonalnie | Status ochrony, punkty za platformę |
+
+Uprawnienia tylko te potrzebne: mikrofon, internet, odczyt kontaktów, powiadomienia; na Androidzie rola filtra połączeń.
+
+### Ocena ryzyka (basal-1)
+
+`basal-serve` wystawia `POST /v1/systemone` (repo: https://github.com/rkinas/basal). Szybkie tryby wymagają karty Nvidia; na Macu zostaje `--mode eager` (zwykły PyTorch). **Pierwsze zadanie po stronie AI: zmierzyć czas jednej decyzji na Macu.** Oceniamy co 3–4 s, więc ok. 1 s wystarczy.
+
+Szkic schematu (do dopracowania razem z nami):
+
+```json
+{
+  "state": "<ostatnie ~60 s transkryptu z oznaczeniem, kto mówi>",
+  "questions": {
+    "money": {"type": "noul", "instructions": "Does the caller ask for money, a bank transfer, cash handover or a BLIK code?"},
+    "secrecy": {"type": "noul", "instructions": "Does the caller ask to keep the call secret from family or the bank?"},
+    "authority": {"type": "noul", "instructions": "Does the caller claim to be police, a bank, a prosecutor or another authority?"},
+    "urgency": {"type": "noul", "instructions": "Does the caller pressure the person to act immediately?"},
+    "scam_type": {"type": "choice", "instructions": "Which scam pattern fits best?",
+      "criteria": {"none": "Normal conversation", "grandchild": "Relative in trouble needs money", "police": "Fake police officer or prosecutor", "bank": "Fake bank employee, account at risk", "other": "Another fraud pattern"}},
+    "risk": {"type": "score", "instructions": "How likely is this call a scam?",
+      "criteria": {"low": "No signs", "medium": "Some warning signs", "high": "Clear scam pattern", "critical": "Money is about to be handed over"}}
+  }
+}
+```
+
+Progi wstępne: od 50/100 ostrzeżenie, od 80 hasło rodzinne i rozłączenie. Wynik wygładzamy (np. średnia ruchoma albo dwa kolejne odczyty), żeby jedno słowo nie rozłączało rozmowy. Reguły (PL i EN: BLIK, przelew, gotówka, „nikomu nie mów”, policja, prokurator…) to bezpiecznik, gdy model się pomyli. Obsłuż: timeout modelu, błąd HTTP, dziwną odpowiedź. Wtedy działają same reguły, a w logach jest ślad.
+
+Ewaluacja: kilkaset syntetycznych rozmów w `scenarios/` (oszustwa i zwykłe rozmowy, także o pieniądzach w rodzinie, PL i EN). Porównujemy basal, Clef-Flash i same reguły: precyzja, czułość, macierz pomyłek, wyniki w README.
+
+### Zachowanie przy awarii
+
+Jeśli backend albo model nie działa, połączenia przechodzą normalnie (fail-open), a apka pokazuje „ochrona chwilowo niedostępna”. To ważne i dla Defence (ciągłość działania), i dla Huawei (obsługa błędów).
+
+## Bezpieczeństwo (Huawei to sprawdza)
+
+- Twilio → backend tylko po `wss://`. Sprawdzamy podpis `X-Twilio-Signature` na webhookach.
+- Backend ↔ apka: WSS (TLS), jednorazowy token na rozmowę ważny kilka minut.
+- Audio i transkrypt tylko w RAM, kasowane po rozmowie. Zapisujemy samo streszczenie alertu.
+- Sekrety w `.env` (wzór w `.env.example`), nigdy w repo ani w historii. Plików do podpisu (`.p12`, `.cer`, `.p7b`) nie commitujemy.
+- Repo jest publiczne od początku: przed każdym commitem sprawdź `git status` i `git diff`.
+
+## Struktura repo (propozycja)
+
+```
+app/          React Native 0.77.1 (TypeScript)
+  harmony/    kontener HarmonyOS (init-harmony) + moduły ArkTS
+  android/    kontener Android + moduły Kotlin
+server/       FastAPI: webhook Twilio, WebSockety, STT, ocena ryzyka, akcje
+panel/        panel rodziny (web)
+scenarios/    rozmowy testowe PL i EN
+deploy/       docker-compose.yml, Caddyfile
+docs/         ARCHITECTURE.md, AI_FEATURES.md
+reference/    materiały organizatorów (wymagania, FAQ Huawei, emulator); w .gitignore, bo nie mają licencji
+AI_WORKFLOW.md
+```
+
+## Środowisko na Macu (Apple Silicon, 48 GB RAM)
+
+- W `~/Downloads`: `devecostudio-mac-arm-6.1.1.280.zip` (DevEco Studio) i `commandline-tools-mac-arm64-6.1.1.280.zip` (narzędzia CLI: m.in. ohpm, hvigorw, hdc). Po rozpakowaniu sprawdź, co jest w środku, i podaj nam dokładne ścieżki do PATH.
+- DevEco Studio: po pierwszym uruchomieniu zamknij je i ustaw region na Chiny, bo inaczej emulator ma tylko zegarki: `~/Library/Application Support/Huawei/DevEcoStudio6.1/options/country.region.xml` → `<countryregion name="CN"/>`.
+- Emulator tworzymy sami w GUI (Device Manager → Phone → najnowszy obraz). Ty z niego korzystasz przez `hdc`.
+- Debug build z DevEco działa bez konta. Do podpisanego .hap na zgłoszenie potrzebne jest konto Huawei Developer.
+- Node 22+. Na Androida potrzebne Android SDK; zapytaj, czy jest zainstalowane.
+- W `.claude/skills/` są skille od Huawei (ArkTS, ArkUI, praca z aplikacją). Nie commitujemy ich, bo repo Huawei nie ma licencji (są w `.gitignore`); źródło: https://github.com/onirodeveloper/hackyeah2026-challenge. Część z nich zakłada `devecocli` (`@deveco/deveco-cli` 1.3.4, Node 22+). Instalator Huawei był tylko na Windows, więc na Macu sprawdź, czy da się go zainstalować, zanim na nim oprzesz pracę.
+
+### Start projektu RN na HarmonyOS (zweryfikuj z dokumentacją RNOH 0.77)
+
+1. `npx @react-native-community/cli init Sprawdzam --version 0.77.1` (potem przenieś do `app/` albo użyj odpowiedniej opcji katalogu).
+2. `npm i --save-exact @react-native-oh/react-native-harmony@0.77.75 @react-native-oh/react-native-harmony-cli@0.77.75`
+3. `npx react-native init-harmony --bundle-name pl.sprawdzam.app` (tworzy katalog `harmony/` z szablonu).
+4. W `harmony/build-profile.json5` ustaw wersje SDK jak w tabeli decyzji. Szablon ma `5.0.0(12)`, a tego nie zostawiamy.
+5. `npx react-native bundle-harmony --dev`, potem build i instalacja przez `hvigorw`/`hdc` albo `npx react-native run-harmony`.
+
+Dokumentacja RNOH (EN): https://gitcode.com/CPF-RN/ohos_react_native/tree/0.77-main/docs/en. Przykład od Oniro (https://github.com/eclipse-oniro4openharmony/app-rnoh-example) jest na RN 0.72 i API 12, więc służy tylko do podglądu. Bierz tylko biblioteki RN, które mają port na HarmonyOS; WebSocket i fetch są w samym RN.
+
+## Ryzyka i plan B
+
+| Ryzyko | Jak sprawdzamy | Plan B |
+| --- | --- | --- |
+| RNOH nie buduje się na API 20+ albo na Macu | „Hello world” na emulatorze do 23:00 | Apka Huawei w ArkTS, Android w RN |
+| basal-1 za wolny na Macu | Czas decyzji w trybie eager + 20 rozmów testowych | Clef-Flash; potem klasyfikator PKO BP + reguły |
+| Mikrofon albo głośnik nie działa na emulatorze | Pierwszy test CallEngine | Telefon Huawei od mentorów |
+| Call Service Kit nie działa na emulatorze | Pytanie do mentorów | Własny ekran połączenia w apce |
+| Brak polskiego numeru na czas | Status weryfikacji w Zadarma i Twilio | Numer z USA, dzwonimy prosto na niego |
+| Odrzucenie nie uruchamia przekierowania „gdy zajęte” | Test `**67*<numer>#` na naszych kartach | Przekierowanie bezwarunkowe + biała lista w chmurze |
+| Whisper za wolny albo słaby na audio 8 kHz | Nagrany skrypt oszustwa przez telefon | Parakeet TDT 0.6B v3; awaryjnie Amazon Transcribe przez adapter |
+| Limit 0 na maszyny GPU w AWS | Service Quotas | Na AWS wersja bez GPU: Transcribe + basal eager albo klasyfikator na CPU |
+
+## Harmonogram (sobota → niedziela)
+
+- 21:00–23:00: konfiguracja. A: Twilio, numer, modele, repo, szkielet backendu. B: DevEco, emulator, RNOH „hello world”.
+- 23:00: decyzja w sprawie RNOH.
+- 23:00–02:00: A: potok audio i ocena ryzyka. B: ekrany RN i CallEngine.
+- 02:00–04:00: razem pierwsza pełna rozmowa od dzwoniącego do alertu.
+- 04:00–07:00: na zmianę sen; Android i test przekierowania; Docker na AWS i testy.
+- 07:00–09:00: wygląd, PL/EN, README, podpisany .hap.
+- 09:00–10:45: nagranie demo, PDF, zgłoszenia. **Termin: niedziela 11:00.**
+
+## Wymagane na koniec (Huawei)
+
+- [ ] Publiczne repo z historią commitów
+- [ ] README: wersje (DevEco, SDK, Node, RNOH), build, instalacja, uruchomienie od zera
+- [ ] Podpisana paczka .hap
+- [ ] Krótkie nagranie demo z emulatora
+- [ ] `docs/ARCHITECTURE.md`: architektura i implementacja
+- [ ] `AI_WORKFLOW.md`: wszystkie narzędzia AI, główne prompty, przebieg pracy, jak weryfikowaliśmy, co nie wyszło
+- [ ] `docs/AI_FEATURES.md`: modele, przepływ danych, prywatność, ograniczenia, walidacja, zachowanie przy błędach
+- [ ] Testy kluczowych scenariuszy (silnik ryzyka, błędna odpowiedź modelu, timeout, brak sieci)
+- [ ] Brak sekretów w repo i w historii
+
+## AI_WORKFLOW.md (wymóg Huawei, 10% oceny)
+
+Na początku każdej sesji przeczytaj `AI_WORKFLOW.md` i dopisz nowe narzędzia (model, agent, MCP, skill). Po każdym większym kawałku pracy dopisz wiersz do dziennika: zadanie, co powstało, jak to sprawdziliśmy. Bez sekretów i danych osobowych. Nie loguj każdej komendy.
+
+## Git
+
+- Jeśli nie ma `.gitignore`, dodaj go przed pierwszym commitem (build, cache DevEco, `oh_modules`, `node_modules`, `.env`, pliki do podpisu).
+- Commituj często, małymi działającymi krokami, z opisowymi wiadomościami po angielsku.
+- Ryzykowne rzeczy rób na osobnych gałęziach. Gałąź `main` ma się zawsze budować. Scalanie do `main` zostaw nam.
+
+## Pierwsza sesja
+
+1. Przeczytaj ten plik, `reference/challenges/huawei_challenge.md`, `reference/hackathon-resources/emulator-capability-comparison.md` i `AI_WORKFLOW.md`. Dopisz Claude Code z wersją do tabeli narzędzi.
+2. Sprawdź środowisko: `node -v`, `python3 --version`, `git`, `brew`, `uv`, Android SDK, DevEco Studio w `/Applications`, zawartość obu ZIP-ów z `~/Downloads`.
+3. Zainicjuj git, jeśli go nie ma (pierwszy commit: `CLAUDE.md`, `AI_WORKFLOW.md`, `.gitignore`, `.env.example`).
+4. Zaproponuj podział pierwszej godziny na dwie osoby (A: backend i AI, B: apka) i zadaj pytania, które blokują start.
+
+## Otwarte pytania (pytaj, gdy staną się potrzebne)
+
+- Czy jeden projekt można zgłosić do Defence i Huawei?
+- Odpowiedzi mentorów Huawei: Call Service Kit i mikrofon na emulatorze, znane problemy RNOH 0.77 z API 20+, podpis .hap pod ich telefon.
+- Który numer przejdzie weryfikację (Zadarma, Twilio PL)?
+- Czy mamy konto AWS i jaki ma limit na maszyny z GPU?
+- Hasło rodzinne ustawiane w panelu rodziny? (propozycja: tak)
