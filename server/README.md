@@ -89,6 +89,23 @@ nohup scripts/run_dev.sh --env .env.dev > ~/models/sprawdzam/logs/backend.log 2>
   `ws://localhost:8765/app/control?device_token=dev-device-1-sprawdzam`.
 - Log: `~/models/sprawdzam/logs/backend.log` (no transcripts, numbers masked).
 
+## Docker deployment (written, not yet run)
+
+`server/Dockerfile` (python:3.12-slim, uv-locked dependencies, non-root user, one worker),
+`deploy/docker-compose.yml` (backend + Caddy) and `deploy/Caddyfile` (automatic HTTPS for
+`DOMAIN`, WebSocket proxying, `/dev/*` blocked, no access log because URLs carry tokens):
+
+```bash
+# repository root, with .env filled in (DOMAIN, Twilio, APP_DEVICE_TOKEN, ...)
+docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
+```
+
+Models stay outside the containers: on the Mac the backend reaches them through
+`host.docker.internal` (start them with `WHISPER_HOST=0.0.0.0` / `BASAL_HOST=0.0.0.0` if
+Docker cannot reach the localhost-bound servers); on AWS set `DOCKER_WHISPER_URL` /
+`DOCKER_BASAL_URL` to the model host. `docker compose config` validates the files; the image
+has not been built yet (no Docker daemon on the hackathon network).
+
 ## Endpoints
 
 | Endpoint | Purpose |

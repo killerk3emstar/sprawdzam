@@ -1,0 +1,14 @@
+# Caddy obtains and renews the TLS certificate for $DOMAIN automatically (ports 80 and 443
+# must be reachable). Twilio webhooks and media streams need this https/wss endpoint.
+# No access log on purpose: request URLs carry one-time tokens in the query string.
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# The browser test tools must never be public, even if DEV_TOOLS is set by mistake.
+	@dev path /dev /dev/*
+	respond @dev 404
+
+	# WebSockets (/twilio/stream, /app/*) are proxied transparently.
+	reverse_proxy backend:8765
+}
