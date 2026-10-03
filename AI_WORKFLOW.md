@@ -27,6 +27,7 @@ This project uses AI-assisted development. Keep this document current and public
 | 2026-10-03 | Claude Code sub-agent (Opus 5.5) | Model bench (`feat/model-bench`): serve Whisper large-v3-turbo (whisper.cpp, Metal) and basal-1 on Apple Silicon, measure latency and answers on phone-quality synthetic audio and 14 hand-written PL/EN transcripts, document both HTTP APIs | `server/bench/` (run/download scripts, bench scripts, transcripts, results, README), `--share-state` patch for basal-serve (one forward pass for all questions, about 2.2x faster) | All numbers from real runs on the M4 Pro: Whisper about 0.5 s per 3 s chunk; basal-1 4.5B on MPS with the patch 0.76 s (risk only) to 1.94 s (6 questions); answers compared with expected labels; coordinator checked that no weights or audio are committed and changed the servers to bind to localhost |
 | 2026-10-03 | Claude Code sub-agent (Opus 5.5) | HarmonyOS audio spike on the emulator: microphone permission, AudioCapturer and AudioRenderer in voice-communication and media modes | `AudioSpike.ets` behind a debug launch flag | Human tapped the permission dialog and confirmed the test sound was audible; hilog showed continuous capture with `SOURCE_TYPE_MIC` (VOICE_COMMUNICATION capture stalls on the emulator) and playback routed to the speaker |
 | 2026-10-03 | Team + Claude Code (Opus 5.5) | Decisions after the first measurements: RNOH GO (22:33), risk score `100·(1−P(low))` with warn ≥50 and hang-up ≥90 (two readings in a row, plus a secrecy or rule signal), Clef-Flash only if time allows, telephony purchase postponed in favour of free browser test pages | `CLAUDE.md` updated with measured facts and decisions | Team chose from options with trade-offs prepared by the coordinator from the sub-agents' measurements |
+| 2026-10-03 | Claude Code sub-agent (Opus 5.5) | Telephony provider adapter (Twilio implemented, SignalWire differences documented), senior app relay (protocol v0 in `docs/APP_PROTOCOL.md`), browser test pages `/dev/caller` and `/dev/senior` | `server/app/telephony/`, `server/app/relay/`, `server/app/calls/`, `server/app/dev/` | Coordinator re-ran the suite (198 passed); sub-agent tested every commit separately, ran a live uvicorn with Python WebSocket clients (ringback, accept, 1 kHz / 500 Hz tones arriving at the right pitch in both directions, token masked in logs), checked the pages in a browser pane and the AudioWorklet in an OfflineAudioContext, and compared the JS μ-law codec with Python (0 differences) |
 
 ## Workflow
 
@@ -52,7 +53,11 @@ Sub-agents commit but never push or merge. The coordinator reviews each report a
 
 ## Unsuccessful approaches
 
-- [What was tried, why it failed, and what changed afterward.]
+- Twilio trial account: `<Stream>` is blocked on trial accounts, so the free plan cannot carry our core flow; the team postponed buying credit and built browser test pages that speak the Media Streams format instead.
+- HarmonyOS emulator: `AudioCapturer` with `SOURCE_TYPE_VOICE_COMMUNICATION` delivers a few buffers and then stalls; `SOURCE_TYPE_MIC` streams continuously, so the app uses MIC on the emulator.
+- basal-1 out of the box on Apple Silicon: 7.6 s per 6-question decision in eager mode and 4.5 s in MLX mode, too slow for a 3–4 s cycle; fixed with MPS mode, a share-state patch and fewer questions per cycle.
+- Whisper: `--audio-ctx 256` cut encoder time but produced garbage; a keyword prompt made it invent words; 2 s chunks were clearly less accurate than 3–8 s.
+- Installing `node@22` with Homebrew upgraded a shared library (`simdutf`) and broke the default `node`; fixed by rebuilding `merve`.
 
 ## Known limitations
 
