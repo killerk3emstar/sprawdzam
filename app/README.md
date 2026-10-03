@@ -70,20 +70,28 @@ hvigorw assembleHap --mode module -p module=entry@default -p product=default -p 
 Output: `app/harmony/entry/build/default/outputs/default/entry-default-unsigned.hap` (about 40 MB in debug, arm64-v8a native libs).
 The first build compiles the RNOH C++ core and takes about 1.5 minutes on an M4 Pro; later builds are incremental.
 
-During the build the RNOH hvigor plugin runs codegen and autolinking (generated files are git-ignored) and tries to forward the Metro port with `hdc rport`. Without a connected device it logs `[metro] [Fail]ExecuteCommand need connect-key`, which is harmless.
+During the build the RNOH hvigor plugin runs codegen and autolinking (generated files are git-ignored) and tries to forward the Metro port with `hdc rport`. Without a connected device it logs `[metro] [Fail]ExecuteCommand need connect-key`, which is harmless. It also logs `ERROR: 00303137 ... No npmrc file is matched` while installing its own pnpm; the build continues and this can be ignored.
+
+Known quirks:
+
+- **Keep the checkout path short.** hvigor installs the RNOH plugin through pnpm, whose cache file name contains the full path to `node_modules/@react-native-oh/react-native-harmony-cli/harmony/rnoh-hvigor-plugin-0.77.75.tgz`. A deep checkout fails with `ERR_PNPM_ENAMETOOLONG` / `00308002 Operation Error` (observed with a 120-character path; `/Users/<you>/Dev/HackYeah/2026/sprawdzam-app` works).
+- **`harmony/oh-package.json5` gains an empty line on every build.** The RNOH 0.77.75 autolinker rewrites the file and appends `\n` each time (`JSON5Writer.updateDependencies` in the CLI). Discard it before committing: `git checkout -- app/harmony/oh-package.json5`.
 
 ### 3. Install and launch on the emulator
 
 Start the emulator in DevEco Studio (Device Manager, phone, newest image), then:
 
 ```bash
-hdc list targets                 # e.g. 127.0.0.1:5555
+hdc list targets                 # e.g. 127.0.0.1:5555 (add -t <target> below if several are connected)
 hdc install -r app/harmony/entry/build/default/outputs/default/entry-default-unsigned.hap
 hdc shell aa start -a EntryAbility -b pl.sprawdzam.app
 hdc hilog | grep -iE "rnoh|sprawdzam"   # logs
+
+# screenshot
+hdc shell snapshot_display -f /data/local/tmp/s.jpeg && hdc file recv /data/local/tmp/s.jpeg ./s.jpeg
 ```
 
-The RNOH CLI (`run-harmony`) installs the unsigned HAP on emulators, so this should work without signing. If the emulator rejects it, sign the app in DevEco Studio instead (see below).
+The DevEco Studio emulator accepts the unsigned debug HAP (verified on the phone emulator, HarmonyOS 6.1.0.126, API 24: `install bundle successfully`, the screen shows "Platform: harmony"). A physical device needs a signed HAP (see below).
 
 ### 4. Development with Metro (hot reload)
 
@@ -93,7 +101,7 @@ npm start                        # Metro on port 8081
 hdc rport tcp:8081 tcp:8081      # device localhost:8081 -> Mac
 ```
 
-Debug builds try Metro first, then the bundled file.
+Debug builds try Metro first, then the bundled file. Restart the app after starting Metro (`hdc shell aa force-stop pl.sprawdzam.app`, then `aa start` as above); Metro logs `BUNDLE ./index.js` when the device fetches the bundle. Remove the forward afterwards with `hdc fport rm tcp:8081 tcp:8081`.
 
 ### 5. Signing (DevEco Studio)
 
@@ -101,6 +109,8 @@ Debug builds try Metro first, then the bundled file.
 2. **File > Project Structure > Signing Configs**, tick **Automatically generate signature** (needs a Huawei Developer account), OK.
 3. DevEco writes `signingConfigs` into `harmony/build-profile.json5`, which is git-ignored on purpose. Never commit signing material (`.p12`, `.cer`, `.p7b`, `.csr`) or passwords.
 4. Rebuild: the output becomes `entry-default-signed.hap`.
+
+For the release HAP, the RNOH hvigor plugin can run `bundle-harmony` by itself in release mode: set `bundler: { enabled: true, dev: false }` in `createRNOHProjectPlugin()` in `harmony/hvigorfile.ts` (not enabled yet).
 
 According to the Huawei hackathon FAQ, Run/Debug from DevEco Studio also works for debug builds without an account (automatic debug certificate).
 
