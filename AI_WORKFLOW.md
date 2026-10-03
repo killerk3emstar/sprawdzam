@@ -31,7 +31,15 @@ AI helped compare the hackathon challenges against their rules and judging crite
 
 ### Implementation
 
-[Describe the AI-assisted coding workflow and how generated output was reviewed before acceptance.]
+Claude Code runs as a coordinator in the main checkout and delegates independent tracks to parallel sub-agents (Claude Code `Agent` tool, same model). Each sub-agent gets a self-contained brief (scope, fixed decisions from `CLAUDE.md`, environment paths, commit rules, a 30-minute "stop and report" limit) and works in its own git worktree on a feature branch, so agents never edit the same files:
+
+| Track | Worktree / branch | Brief (summary) |
+| --- | --- | --- |
+| Backend skeleton | `sprawdzam-server` / `feat/server-skeleton` | FastAPI app: Twilio webhook with signature check, Media Streams WebSocket, μ-law decoding, PL/EN keyword rules, smoothing, model fallback, tests; all external services behind interfaces with fakes |
+| App | `sprawdzam-app` / `feat/app-rnoh` | React Native 0.77.1 + RNOH 0.77.75 project, HarmonyOS container with API 20 minimum / API 24 target, CLI build of the HAP |
+| Models | `sprawdzam-models` / `feat/model-bench` | Download and serve Whisper large-v3-turbo (whisper.cpp) and basal-1 on Apple Silicon, measure latency and answers on synthetic PL/EN calls, document the HTTP APIs |
+
+Sub-agents commit but never push or merge. The coordinator reviews each report and diff, and the team merges feature branches into `main` themselves.
 
 ### Testing and debugging
 
