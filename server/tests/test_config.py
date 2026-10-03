@@ -52,7 +52,8 @@ def test_invalid_values_rejected(values):
 def test_model_defaults_and_urls():
     settings = make()
     assert (settings.RISK_WARN, settings.RISK_HANGUP, settings.SECRECY_HANGUP_MIN) == (50, 90, 0.8)
-    assert settings.STT_TIMEOUT_SECONDS == 3.0 and settings.DECISION_TIMEOUT_SECONDS == 3.0
+    assert settings.STT_TIMEOUT_SECONDS == 5.0 and settings.DECISION_TIMEOUT_SECONDS == 3.0
+    assert settings.DECISION_FULL_REFRESH_SECONDS == 10.0
     assert make(WHISPER_URL="http://127.0.0.1:8080/").WHISPER_URL == "http://127.0.0.1:8080"
 
 
@@ -61,3 +62,16 @@ def test_valid_relay_settings():
     assert settings.FAMILY_PASSWORD.get_secret_value() == "2468"
     assert settings.DEFAULT_LANG == "en"
     assert "x" * 32 not in repr(settings)
+
+
+def test_factory_passes_model_settings(tmp_path):
+    from app.factory import create_app
+
+    app = create_app(make(DATA_DIR=str(tmp_path)))
+    engine = app.state.services.engine
+    assert engine.full_refresh_seconds == 10.0
+    assert (engine.warn_threshold, engine.hangup_threshold, engine.secrecy_hangup_min) == (
+        50,
+        90,
+        0.8,
+    )

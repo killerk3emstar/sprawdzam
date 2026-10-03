@@ -52,16 +52,16 @@ class Settings(BaseSettings):
     BASAL_URL: str = ""
     CLEF_URL: str = ""
     DECISION_TIMEOUT_SECONDS: float = Field(default=3.0, gt=0, le=30)
-    # 0 = ask basal's full six questions once per call. > 0 = re-ask at most this often while
-    # the hang-up gate is blocked only by a stale (low) secrecy answer.
-    DECISION_FULL_REFRESH_SECONDS: float = Field(default=0.0, ge=0, le=600)
+    # Re-ask basal's full six questions at most this often while the hang-up gate is blocked
+    # only by a stale (low) secrecy answer. 0 = ask them once per call.
+    DECISION_FULL_REFRESH_SECONDS: float = Field(default=10.0, ge=0, le=600)
     HF_TOKEN: SecretStr = SecretStr("")
 
     # Audio pipeline: pause-based speech segments sent to speech-to-text
     STT_MIN_SEGMENT_SECONDS: float = Field(default=3.0, ge=0.5, le=10.0)
     STT_MAX_SEGMENT_SECONDS: float = Field(default=8.0, ge=1.0, le=25.0)
     STT_PAUSE_SECONDS: float = Field(default=0.2, ge=0.1, le=2.0)
-    STT_TIMEOUT_SECONDS: float = Field(default=3.0, gt=0, le=60)
+    STT_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0, le=60)
 
     # Risk thresholds (0-100); warn and hang-up each need two readings in a row
     RISK_WARN: int = Field(default=50, ge=0, le=100)

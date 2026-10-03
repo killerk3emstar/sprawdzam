@@ -187,8 +187,9 @@ warm-up request to each (the first basal decision compiles kernels, ~2 s); `/hea
 - **Whisper client** (`app/stt/whisper.py`): `POST /inference` with a 16 kHz PCM16 WAV,
   `language` forced from the call, `verbose_json`, `temperature=0.0`. Segments with
   `no_speech_prob > 0.6` and known silence hallucinations ("KONIEC", "Napisy wykonane…",
-  "Dziękuję za uwagę", "Thank you for watching") are dropped. Timeout 3 s; errors skip the
-  segment (`stt_failed` in the log) and the call goes on.
+  "Dziękuję za uwagę", "Thank you for watching") are dropped. Timeout 5 s (measured 0.5–1 s
+  alone, ~2.2 s while basal is busy on the same GPU); errors skip the segment (`stt_failed`)
+  and the call goes on.
 - **basal client** (`app/risk/basal.py`, schemas in `app/risk/schemas/`): state = the last
   60 s of transcript with speaker tags (`Dzwoniący:` / `Caller:`; only the caller for now),
   PL or EN schema from the call language. Every new segment asks `risk` + `scam_type`
@@ -204,8 +205,8 @@ warm-up request to each (the first basal decision compiles kernels, ~2 s); `/hea
   two readings in a row. Family-password check, then hang-up, at ≥ `RISK_HANGUP` (90) for two
   readings in a row **and** (cached secrecy ≥ `SECRECY_HANGUP_MIN` (0.8) or a keyword-rule
   hit: a secrecy phrase or a rules score ≥ `RISK_WARN`). Actions only escalate.
-  `DECISION_FULL_REFRESH_SECONDS` (default 0 = off) re-asks the six questions while the
-  hang-up gate is blocked only by an early, low secrecy answer.
+  `DECISION_FULL_REFRESH_SECONDS` (default 10, 0 = once per call) re-asks the six questions
+  at most that often while the hang-up gate is blocked only by an early, low secrecy answer.
 - Logs carry per-segment `stt_latency` and per-request `decision_latency` (ms), scores and
   categories; never transcript text.
 
