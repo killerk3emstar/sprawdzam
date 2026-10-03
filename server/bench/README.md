@@ -39,12 +39,15 @@ Prerequisites: Homebrew `whisper-cpp` (1.9.4, provides `whisper-server`), `ffmpe
 ```bash
 brew install whisper-cpp ffmpeg uv huggingface-cli
 server/bench/download-models.sh          # Whisper 1.6 GB + basal 9.5 GB + engine venv (~1 GB)
-server/bench/run-whisper.sh              # terminal 1: http://0.0.0.0:8080
-server/bench/run-basal.sh                # terminal 2: http://0.0.0.0:8000
+server/bench/run-whisper.sh              # terminal 1: http://127.0.0.1:8080
+server/bench/run-basal.sh                # terminal 2: http://127.0.0.1:8000
 ```
 
-Both servers bind to `0.0.0.0`, so the backend container reaches them at `http://host.docker.internal:8080` and
-`:8000` (`WHISPER_URL`, `BASAL_URL` in `.env.example`).
+Both servers bind to `127.0.0.1` by default, so they are not exposed on shared networks (e.g. hackathon Wi-Fi).
+A natively running backend uses `http://127.0.0.1:8080` and `:8000`. The Docker backend container uses
+`http://host.docker.internal:8080` and `:8000` (`WHISPER_URL`, `BASAL_URL` in `.env.example`); if Docker Desktop
+cannot reach the localhost-bound servers, start them with `WHISPER_HOST=0.0.0.0` / `BASAL_HOST=0.0.0.0` and keep
+the macOS firewall on.
 
 Where the models live (outside the repo, never committed):
 
@@ -62,7 +65,7 @@ backend should send one warm-up request at start-up.**
 
 ## whisper-server HTTP API
 
-`run-whisper.sh` = `whisper-server --model ggml-large-v3-turbo.bin --host 0.0.0.0 --port 8080 --language pl
+`run-whisper.sh` = `whisper-server --model ggml-large-v3-turbo.bin --host 127.0.0.1 --port 8080 --language pl
 --threads 4 --no-timestamps --suppress-nst`.
 
 `GET /health` → `{"status":"ok"}`
@@ -110,7 +113,7 @@ Notes for the backend client:
 
 ## basal-serve HTTP API (`POST /v1/systemone`)
 
-`run-basal.sh` = `basal-serve --model ~/models/sprawdzam/basal-1.0-4.5B --name basal-1.0-4.5B --mode mps --host 0.0.0.0
+`run-basal.sh` = `basal-serve --model ~/models/sprawdzam/basal-1.0-4.5B --name basal-1.0-4.5B --mode mps --host 127.0.0.1
 --port 8000 --share-state`. Other endpoints: `GET /health` → `{"status": "ok"}`, `GET /v1/models` →
 `{"models": [{"name": "basal-1.0-4.5B", "release_date": "2026-10-01", "mode": "mps", "early_exit": [], …}]}`.
 

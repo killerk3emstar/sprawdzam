@@ -12,7 +12,7 @@ set -euo pipefail
 
 WHISPER_BIN_DIR="${WHISPER_BIN_DIR:-/opt/homebrew/opt/whisper.cpp/bin}"
 WHISPER_MODEL="${WHISPER_MODEL:-$HOME/models/sprawdzam/whisper/ggml-large-v3-turbo.bin}"
-WHISPER_HOST="${WHISPER_HOST:-0.0.0.0}"   # 0.0.0.0 so Docker containers can reach it via host.docker.internal
+WHISPER_HOST="${WHISPER_HOST:-127.0.0.1}"   # localhost only (public hackathon Wi-Fi); set 0.0.0.0 only if Docker cannot reach it via host.docker.internal, and keep the macOS firewall on
 WHISPER_PORT="${WHISPER_PORT:-8080}"
 WHISPER_LANG="${WHISPER_LANG:-pl}"
 WHISPER_THREADS="${WHISPER_THREADS:-4}"

@@ -16,7 +16,7 @@ BASAL_SRC="${BASAL_SRC:-$MODELS_DIR/basal-src}"
 BASAL_MODEL="${BASAL_MODEL:-$MODELS_DIR/basal-1.0-4.5B}"
 BASAL_MODE="${BASAL_MODE:-mps}"
 BASAL_SHARE_STATE="${BASAL_SHARE_STATE:-1}"   # needs basal/basal-share-state.patch (applied by download-models.sh)
-BASAL_HOST="${BASAL_HOST:-0.0.0.0}"   # 0.0.0.0 so Docker containers can reach it via host.docker.internal
+BASAL_HOST="${BASAL_HOST:-127.0.0.1}"   # localhost only (public hackathon Wi-Fi); set 0.0.0.0 only if Docker cannot reach it via host.docker.internal, and keep the macOS firewall on
 BASAL_PORT="${BASAL_PORT:-8000}"
 
 if [[ ! -x "$BASAL_SRC/.venv/bin/basal-serve" ]]; then
