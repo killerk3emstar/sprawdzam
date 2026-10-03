@@ -1,5 +1,5 @@
 /**
- * Sprawdzam / Second Ear: hello-world screen.
+ * Sprawdzam / Second Ear: hello-world screen with the CallEngine developer panel.
  * Shared by the HarmonyOS (RNOH) and Android builds.
  * Real screens (protection status, incoming call, alerts) come later.
  *
@@ -10,11 +10,13 @@ import React from 'react';
 import {
   Platform,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import {DevCallPanel} from './src/DevCallPanel';
 
 const COLORS = {
   background: '#F4F7FB',
@@ -28,7 +30,7 @@ function App(): React.JSX.Element {
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title} accessibilityRole="header">
           Sprawdzam
         </Text>
@@ -44,7 +46,9 @@ function App(): React.JSX.Element {
         <Text style={styles.platform} testID="platform-label">
           Platform: {Platform.OS}
         </Text>
-      </View>
+
+        <DevCallPanel />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -55,10 +59,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 32,
   },
   title: {
     fontSize: 40,
@@ -72,8 +76,8 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
   },
   card: {
-    marginTop: 32,
-    paddingVertical: 20,
+    marginTop: 20,
+    paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 16,
     backgroundColor: COLORS.card,
@@ -87,7 +91,7 @@ const styles = StyleSheet.create({
     marginVertical: 6,
   },
   platform: {
-    marginTop: 24,
+    marginTop: 12,
     fontSize: 16,
     color: COLORS.muted,
   },

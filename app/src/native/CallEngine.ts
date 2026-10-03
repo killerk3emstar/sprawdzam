@@ -1,0 +1,96 @@
+/**
+ * JS facade over the CallEngine TurboModule.
+ *
+ * Commands go to the native module (ArkTS on HarmonyOS, Kotlin stub on Android).
+ * Events arrive through DeviceEventEmitter, emitted natively as `CallEngine.<name>`.
+ * Audio never passes through JS.
+ */
+import {DeviceEventEmitter, EmitterSubscription} from 'react-native';
+import NativeCallEngine, {type Spec} from './NativeCallEngine';
+
+export type IncomingCall = {
+  callId: string;
+  token: string;
+  caller: string;
+  lang: string;
+  /** Call WebSocket URL derived natively from the control URL; pass it to acceptCall(). */
+  callUrl: string;
+};
+
+export type RiskLevel = 'none' | 'warn' | 'high';
+
+export type RiskUpdate = {
+  score: number;
+  level: RiskLevel;
+  scamType: string;
+  reasons: string[];
+};
+
+export type VerifyPasswordRequest = {callId: string};
+
+export type CallEnded = {callId: string; reason: string};
+
+export type ProtectionStatus = {
+  /** Backend reports that protection works. */
+  available: boolean;
+  /** Control connection is up. When false, calls pass through unprotected (fail-open). */
+  connected: boolean;
+};
+
+export type CallEngineError = {code: string; message: string};
+
+export type CallEngineEvents = {
+  incomingCall: IncomingCall;
+  risk: RiskUpdate;
+  verifyPassword: VerifyPasswordRequest;
+  callEnded: CallEnded;
+  protectionStatus: ProtectionStatus;
+  error: CallEngineError;
+};
+
+export const CALL_ENGINE_EVENT_NAMES: {[K in keyof CallEngineEvents]: string} = {
+  incomingCall: 'CallEngine.onIncomingCall',
+  risk: 'CallEngine.onRisk',
+  verifyPassword: 'CallEngine.onVerifyPassword',
+  callEnded: 'CallEngine.onCallEnded',
+  protectionStatus: 'CallEngine.onProtectionStatus',
+  error: 'CallEngine.onError',
+};
+
+export function isCallEngineAvailable(): boolean {
+  return NativeCallEngine != null;
+}
+
+function native(): Spec {
+  if (NativeCallEngine == null) {
+    throw new Error('CallEngine native module is not available on this platform');
+  }
+  return NativeCallEngine;
+}
+
+export const CallEngine = {
+  connectControl(url: string, deviceToken: string): Promise<void> {
+    return native().connectControl(url, deviceToken);
+  },
+  disconnectControl(): Promise<void> {
+    return native().disconnectControl();
+  },
+  requestMicrophonePermission(): Promise<boolean> {
+    return native().requestMicrophonePermission();
+  },
+  acceptCall(callUrl: string): Promise<void> {
+    return native().acceptCall(callUrl);
+  },
+  hangup(): Promise<void> {
+    return native().hangup();
+  },
+  sendDtmf(digits: string): Promise<void> {
+    return native().sendDtmf(digits);
+  },
+  addListener<K extends keyof CallEngineEvents>(
+    event: K,
+    listener: (payload: CallEngineEvents[K]) => void,
+  ): EmitterSubscription {
+    return DeviceEventEmitter.addListener(CALL_ENGINE_EVENT_NAMES[event], listener);
+  },
+};

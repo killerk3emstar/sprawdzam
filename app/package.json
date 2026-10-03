@@ -39,5 +39,15 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "harmony": {
+    "codegenConfig": [
+      {
+        "version": 1,
+        "specPaths": [
+          "./src/native"
+        ]
+      }
+    ]
   }
 }
