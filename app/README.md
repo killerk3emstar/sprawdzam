@@ -5,7 +5,7 @@ One React Native code base for two targets:
 - **HarmonyOS** through React Native for OpenHarmony (RNOH), packaged as a `.hap` (Huawei challenge target)
 - **Android**
 
-The current screen is a hello world. Real screens and native modules (CallEngine, contacts, notifications, widget) come next.
+The current screen is a hello world plus a CallEngine developer panel. Real senior-facing screens and the remaining native modules (contacts, notifications, widget) come next.
 
 ## Versions
 
@@ -128,6 +128,56 @@ npm run android                  # build, install and launch on a running emulat
 
 No keystore is committed. Debug builds use the Android Gradle Plugin default `~/.android/debug.keystore`.
 
+## CallEngine (native call audio)
+
+The CallEngine TurboModule connects the app to the backend and carries call audio. Audio stays native:
+JS sends commands and receives control events only, so 50 audio frames per second never cross the bridge.
+
+| Layer | Path |
+| --- | --- |
+| TS spec (codegen input) | `src/native/NativeCallEngine.ts` |
+| JS facade with typed events | `src/native/CallEngine.ts` |
+| Dev panel (connect, incoming call, accept, risk, password, hang up) | `src/DevCallPanel.tsx` |
+| HarmonyOS implementation (ArkTS) | `harmony/entry/src/main/ets/callengine/` |
+| Android stub (Kotlin, rejects with `E_NOT_IMPLEMENTED`) | `android/app/src/main/java/pl/sprawdzam/app/callengine/` |
+| Fake backend for local tests (silent) | `tools/fake_backend.py` |
+
+Codegen: `package.json` → `harmony.codegenConfig` (RNOH `codegen-harmony` v1, run by the hvigor plugin on every build; output in git-ignored `cpp/generated/` and `oh_modules/.../generated/`) and `codegenConfig` (React Native Android codegen, generates `NativeCallEngineSpec`).
+
+API: `connectControl(url, deviceToken)`, `disconnectControl()`, `requestMicrophonePermission()`, `acceptCall(callUrl)`, `hangup()`, `sendDtmf(digits)`. Events (via `DeviceEventEmitter`, names `CallEngine.on*`): `incomingCall` (includes the derived `callUrl`), `risk`, `verifyPassword`, `callEnded`, `protectionStatus`, `error`.
+
+### Protocol v0
+
+- Control: `WS /app/control?device_token=<token>`. Backend → app `{"type":"incoming_call","callId","token","caller","lang"}`, `{"type":"protection_status","available":true}`; app → backend `{"type":"ping"}` every 15 s, answered with `{"type":"pong"}`. The app reconnects with exponential backoff (1 s up to 30 s) and reports `protectionStatus.connected=false` meanwhile (fail-open: calls are not blocked).
+- Call: `WS /app/call/{callId}?token=<one-time token>`. Binary frames are PCM16 LE mono 16 kHz, 20 ms = 640 bytes, in both directions. Backend → app `{"type":"risk","score","level":"none|warn|high","scamType","reasons":[]}`, `{"type":"verify_password"}`, `{"type":"call_ended","reason"}`; app → backend `{"type":"accept"}`, `{"type":"hangup"}`, `{"type":"dtmf","digits"}`.
+- `ws://` is only for the localhost dev path; production uses `wss://`.
+
+### Audio on the DevEco emulator
+
+- Capture with `SOURCE_TYPE_VOICE_COMMUNICATION` stalls after a few buffers on the emulator; `SOURCE_TYPE_MIC` delivers about 32 kB/s at 16 kHz. `VoiceAudio` uses MIC when `deviceInfo.productModel === 'emulator'` and VOICE_COMMUNICATION (echo cancellation) on real phones. A watchdog emits `error` with code `audio_capture_stalled` if no buffers arrive for 1 s.
+- Playback with `STREAM_USAGE_VOICE_COMMUNICATION` goes to the speaker on the emulator.
+
+### Local end-to-end test (silent)
+
+```bash
+cd app
+uv run --with websockets python tools/fake_backend.py --port 8765 --call-after 3
+hdc -t 127.0.0.1:5555 rport tcp:8765 tcp:8765
+# a) from JS: open the app, tap Connect, then Accept; risk updates arrive after 3, 6 and 9 s, then the password prompt
+# b) natively, without JS (auto-accept, DTMF 1234, hang up after 12 s; logs: hdc hilog | grep CallEngine):
+hdc -t 127.0.0.1:5555 shell aa start -a EntryAbility -b pl.sprawdzam.app --ps spike call --ps url ws://127.0.0.1:8765/app/control --ps secs 12
+```
+
+Port 8000 is used by `basal-serve` on the dev Mac, hence 8765. The fake backend sends only zero PCM frames, so nothing is audible.
+
+### Debug spikes
+
+`EntryAbility` runs debug checks from launch parameters (`aa start -a EntryAbility -b pl.sprawdzam.app --ps spike ...`):
+
+- `--ps spike audio [--ps source mic|voice|recognition|unprocessed] [--ps rate 16000|48000] [--ps secs 10] [--ps play 0|1]`: capture test with RMS per 100 ms and throughput logs (`hdc hilog | grep SprawdzamAudio`). Silent unless `play 1`.
+- `--ps spike beep`: **audible** siren via MUSIC and VOICE_COMMUNICATION. Agree on audible tests with the team before running them on a shared emulator.
+- `--ps spike call`: native call self-test (see above).
+
 ## Checks
 
 ```bash
@@ -142,10 +192,13 @@ npm run lint      # ESLint
 ```
 app/
   App.tsx, index.js        shared React Native code (TypeScript)
+  src/native/              TurboModule specs and JS facades (CallEngine)
+  src/DevCallPanel.tsx     CallEngine developer panel
+  tools/fake_backend.py    silent protocol v0 backend for local tests
   metro.config.js          adds the "harmony" platform (createHarmonyMetroConfig)
   harmony/                 HarmonyOS container (created with `react-native init-harmony`)
     AppScope/app.json5     bundle name pl.sprawdzam.app
     build-profile.template.json5   SDK versions; copy to build-profile.json5
-    entry/                 entry module: ArkTS (EntryAbility, Index.ets), C++ glue (CMakeLists.txt, PackageProvider.cpp)
-  android/                 Android container (Kotlin)
+    entry/                 entry module: ArkTS (EntryAbility, Index.ets, callengine/), C++ glue (CMakeLists.txt, PackageProvider.cpp)
+  android/                 Android container (Kotlin, callengine/ stub)
 ```

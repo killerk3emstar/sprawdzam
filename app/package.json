@@ -49,5 +49,13 @@
         ]
       }
     ]
+  },
+  "codegenConfig": {
+    "name": "SprawdzamSpecs",
+    "type": "modules",
+    "jsSrcsDir": "src/native",
+    "android": {
+      "javaPackageName": "pl.sprawdzam.app.specs"
+    }
   }
 }
