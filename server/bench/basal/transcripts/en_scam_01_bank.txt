@@ -1,0 +1,9 @@
+Caller: Hello, this is Mark Johnson from the fraud department of your bank. Am I speaking with Mr. Robert Miller?
+Senior: Yes, speaking.
+Caller: We have detected suspicious activity on your account. Someone is trying to take out a loan of twelve thousand pounds in your name. Did you authorise this?
+Senior: No, I certainly did not.
+Caller: I thought so. Your savings are at risk, so we need to move your money to a safe account right now, before the criminals empty it. I will give you the account details in a moment.
+Senior: Shouldn't I go to my branch instead?
+Caller: Unfortunately we believe someone at your branch is involved, so please do not tell anyone about this call, not even your family, the criminals may be listening. I will also need the one-time code from the text message we just sent you, and the three digits on the back of your card, to verify your identity.
+Senior: I'm not sure about this.
+Caller: Sir, I understand, but we must act immediately, otherwise you will lose everything. Please stay on the line.

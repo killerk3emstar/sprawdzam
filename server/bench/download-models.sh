@@ -23,6 +23,13 @@ if [[ "$what" == all || "$what" == basal ]]; then
     git clone https://github.com/rkinas/basal "$MODELS_DIR/basal-src"
   fi
   git -C "$MODELS_DIR/basal-src" checkout -q "$BASAL_REF"
+  # local patch: --share-state (compute the state once per request instead of once per question, ~2.2x faster)
+  PATCH="$(cd "$(dirname "$0")" && pwd)/basal/basal-share-state.patch"
+  if git -C "$MODELS_DIR/basal-src" apply --reverse --check "$PATCH" 2>/dev/null; then
+    echo "basal-share-state.patch already applied"
+  else
+    git -C "$MODELS_DIR/basal-src" apply "$PATCH"
+  fi
   # Python 3.12 venv with PyTorch (MPS) + MLX; no CUDA index on a Mac
   (cd "$MODELS_DIR/basal-src" && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[mlx]")
 fi

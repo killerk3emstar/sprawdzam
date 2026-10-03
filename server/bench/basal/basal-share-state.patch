@@ -1,0 +1,62 @@
+diff --git a/basal/server.py b/basal/server.py
+index a35923c..2e9fc54 100644
+--- a/basal/server.py
++++ b/basal/server.py
+@@ -158,6 +158,7 @@ class Server:
+         cal = md / "CALIBRATION.json"
+         self.temps = {} if a.no_calibration or not cal.exists() else json.loads(cal.read_text()).get("temperature_per_prim", {})
+         self.orders = a.orders
++        self.share_state = a.share_state
+         self.letters = {}
+         self.queue, self.max_batch, self.wait = asyncio.Queue(), a.max_batch, a.wait_ms / 1000
+ 
+@@ -211,14 +212,33 @@ class Server:
+         qs = to_items(body["state"], body["questions"])
+         loop = asyncio.get_running_loop()
+         pend, n_tok = [], 0
+-        for q in qs:  # one queue entry = all option orders of one question (shared prefix)
+-            jobs = self.jobs_for(q)
+-            if any(ids is None for _, _, ids in jobs):
++        if self.share_state and len(qs) > 1:
++            # one queue entry = all option orders of ALL questions: the system prompt and the state (the common token
++            # prefix of every prompt) are computed once per request instead of once per question; each question block
++            # still sees only the prefix and itself (same block mask as for the two option orders), so the result is
++            # equivalent to separate forwards
++            jobs_all = [self.jobs_for(q) for q in qs]
++            if any(ids is None for jobs in jobs_all for _, _, ids in jobs):
+                 raise ValueError("option letters are not single tokens for this tokenizer")
+-            fut = loop.create_future()
+-            n_tok += sum(len(self.tok(p, add_special_tokens=False).input_ids) for _, p, _ in jobs)
+-            await self.queue.put(([p for _, p, _ in jobs], [ids for _, _, ids in jobs], fut, pol))
+-            pend.append((q, [perm for perm, _, _ in jobs], fut))
++            shared = loop.create_future()
++            prompts = [p for jobs in jobs_all for _, p, _ in jobs]
++            n_tok = sum(len(self.tok(p, add_special_tokens=False).input_ids) for p in prompts)
++            await self.queue.put((prompts, [ids for jobs in jobs_all for _, _, ids in jobs], shared, pol))
++            flat, j = await shared, 0
++            for q, jobs in zip(qs, jobs_all):
++                fut = loop.create_future()
++                fut.set_result(flat[j: j + len(jobs)])
++                j += len(jobs)
++                pend.append((q, [perm for perm, _, _ in jobs], fut))
++        else:
++            for q in qs:  # one queue entry = all option orders of one question (shared prefix)
++                jobs = self.jobs_for(q)
++                if any(ids is None for _, _, ids in jobs):
++                    raise ValueError("option letters are not single tokens for this tokenizer")
++                fut = loop.create_future()
++                n_tok += sum(len(self.tok(p, add_special_tokens=False).input_ids) for _, p, _ in jobs)
++                await self.queue.put(([p for _, p, _ in jobs], [ids for _, _, ids in jobs], fut, pol))
++                pend.append((q, [perm for perm, _, _ in jobs], fut))
+         answers = {}
+         for q, perms, fut in pend:
+             canon = []
+@@ -257,6 +277,8 @@ def parser():
+     ap.add_argument("--quant", choices=["fp8", "nvfp4", "q8"], default=None,
+                     help="override the quantisation of the mode (fp8 / nvfp4: CUDA modes, q8: mlx)")
+     ap.add_argument("--dtype", default="bfloat16")
++    ap.add_argument("--share-state", dest="share_state", action="store_true",
++                    help="pack all questions of a request into one row so the state is computed once (local patch)")
+     ap.add_argument("--orders", type=int, choices=[1, 2], default=2,
+                     help="2 = ask in original and reversed option order and average (default, reduces order sensitivity)")
+     ap.add_argument("--early-exit", dest="early_exit", default="off", help="default policy for --mode fast-exit")

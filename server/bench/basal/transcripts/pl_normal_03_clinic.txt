@@ -1,0 +1,10 @@
+Dzwoniący: Dzień dobry, mówi Agnieszka z rejestracji przychodni Zdrowie przy ulicy Długiej. Czy rozmawiam z panią Marią Kamińską?
+Senior: Tak, dzień dobry.
+Dzwoniący: Dzwonię, żeby przypomnieć o wizycie u kardiologa, doktora Wójcika, w najbliższy czwartek o godzinie dziesiątej trzydzieści. Czy termin jest nadal aktualny?
+Senior: Tak, będę. Czy mam coś ze sobą wziąć?
+Dzwoniący: Proszę zabrać wyniki ostatnich badań krwi i EKG, jeśli pani je ma, oraz listę leków, które pani obecnie przyjmuje. Wizyta jest w ramach NFZ, więc nic pani nie płaci.
+Senior: A czy mogę przyjść z córką? Ona mnie przywiezie.
+Dzwoniący: Oczywiście, nie ma problemu. Gdyby jednak coś się zmieniło, prosimy o telefon do rejestracji, najlepiej dzień wcześniej, żebyśmy mogli dać termin innemu pacjentowi.
+Senior: Dobrze, dziękuję bardzo za przypomnienie.
+Dzwoniący: Dziękuję, do widzenia, życzę zdrowia.
+Senior: Do widzenia.

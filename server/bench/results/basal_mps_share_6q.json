@@ -1,0 +1,349 @@
+{
+ "label": "mps bf16 (PyTorch), --share-state, 6 questions",
+ "summary": {
+  "model": {
+   "models": [
+    {
+     "name": "basal-1.0-4.5B",
+     "release_date": "2026-10-01",
+     "description": "basal typed-decision model (choice / noul / score), Polish and English",
+     "mode": "mps",
+     "early_exit": []
+    }
+   ]
+  },
+  "schema": "auto",
+  "questions": [
+   "money",
+   "secrecy",
+   "authority",
+   "urgency",
+   "scam_type",
+   "risk"
+  ],
+  "requests_timed": 14,
+  "latency_p50_s": 1.939,
+  "latency_p95_s": 2.389,
+  "latency_max_s": 2.45,
+  "mean_input_tokens": 4904,
+  "scams": 7,
+  "scams_flagged_ge50": 6,
+  "normals": 7,
+  "normals_flagged_ge50": 0,
+  "scams_ge80": 0,
+  "normals_ge80": 0,
+  "min_risk_not_low_scam": 64,
+  "max_risk_not_low_normal": 5,
+  "scam_type_correct": 14
+ },
+ "rows": [
+  {
+   "id": "en_normal_01_grandson",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 5844,
+   "latency_p50_s": 2.253,
+   "server_latency_p50_s": 2.252,
+   "money": 0.789,
+   "secrecy": 0.085,
+   "authority": 0.012,
+   "urgency": 0.082,
+   "scam_type": "none",
+   "scam_type_conf": 0.791,
+   "risk_0_100": 2,
+   "risk_not_low": 4,
+   "risk_probs": {
+    "low": 0.965,
+    "medium": 0.019,
+    "high": 0.005,
+    "critical": 0.011
+   }
+  },
+  {
+   "id": "en_normal_02_surgery",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 5724,
+   "latency_p50_s": 2.271,
+   "server_latency_p50_s": 2.27,
+   "money": 0.014,
+   "secrecy": 0.031,
+   "authority": 0.026,
+   "urgency": 0.096,
+   "scam_type": "none",
+   "scam_type_conf": 0.998,
+   "risk_0_100": 0,
+   "risk_not_low": 1,
+   "risk_probs": {
+    "low": 0.993,
+    "medium": 0.005,
+    "high": 0.001,
+    "critical": 0.001
+   }
+  },
+  {
+   "id": "en_scam_01_bank",
+   "label": "scam",
+   "expected_type": "bank",
+   "input_tokens": 6204,
+   "latency_p50_s": 2.45,
+   "server_latency_p50_s": 2.449,
+   "money": 0.258,
+   "secrecy": 0.9,
+   "authority": 0.633,
+   "urgency": 0.959,
+   "scam_type": "bank",
+   "scam_type_conf": 0.955,
+   "risk_0_100": 65,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.011,
+    "medium": 0.049,
+    "high": 0.918,
+    "critical": 0.023
+   }
+  },
+  {
+   "id": "en_scam_02_grandchild",
+   "label": "scam",
+   "expected_type": "grandchild",
+   "input_tokens": 5904,
+   "latency_p50_s": 2.389,
+   "server_latency_p50_s": 2.388,
+   "money": 0.633,
+   "secrecy": 0.9,
+   "authority": 0.22,
+   "urgency": 0.927,
+   "scam_type": "grandchild",
+   "scam_type_conf": 0.877,
+   "risk_0_100": 32,
+   "risk_not_low": 64,
+   "risk_probs": {
+    "low": 0.362,
+    "medium": 0.433,
+    "high": 0.094,
+    "critical": 0.11
+   }
+  },
+  {
+   "id": "pl_normal_01_lunch",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 4728,
+   "latency_p50_s": 2.085,
+   "server_latency_p50_s": 2.084,
+   "money": 0.437,
+   "secrecy": 0.019,
+   "authority": 0.004,
+   "urgency": 0.348,
+   "scam_type": "none",
+   "scam_type_conf": 0.984,
+   "risk_0_100": 3,
+   "risk_not_low": 5,
+   "risk_probs": {
+    "low": 0.949,
+    "medium": 0.029,
+    "high": 0.016,
+    "critical": 0.006
+   }
+  },
+  {
+   "id": "pl_normal_02_son_loan",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 4632,
+   "latency_p50_s": 1.984,
+   "server_latency_p50_s": 1.983,
+   "money": 0.877,
+   "secrecy": 0.035,
+   "authority": 0.003,
+   "urgency": 0.093,
+   "scam_type": "none",
+   "scam_type_conf": 0.935,
+   "risk_0_100": 1,
+   "risk_not_low": 3,
+   "risk_probs": {
+    "low": 0.974,
+    "medium": 0.016,
+    "high": 0.007,
+    "critical": 0.003
+   }
+  },
+  {
+   "id": "pl_normal_03_clinic",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 4248,
+   "latency_p50_s": 1.874,
+   "server_latency_p50_s": 1.873,
+   "money": 0.003,
+   "secrecy": 0.005,
+   "authority": 0.005,
+   "urgency": 0.069,
+   "scam_type": "none",
+   "scam_type_conf": 0.999,
+   "risk_0_100": 0,
+   "risk_not_low": 0,
+   "risk_probs": {
+    "low": 0.995,
+    "medium": 0.003,
+    "high": 0.002,
+    "critical": 0.0
+   }
+  },
+  {
+   "id": "pl_normal_04_courier",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 4200,
+   "latency_p50_s": 1.87,
+   "server_latency_p50_s": 1.87,
+   "money": 0.396,
+   "secrecy": 0.006,
+   "authority": 0.005,
+   "urgency": 0.396,
+   "scam_type": "none",
+   "scam_type_conf": 0.997,
+   "risk_0_100": 1,
+   "risk_not_low": 2,
+   "risk_probs": {
+    "low": 0.98,
+    "medium": 0.013,
+    "high": 0.005,
+    "critical": 0.002
+   }
+  },
+  {
+   "id": "pl_normal_05_neighbour",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 4620,
+   "latency_p50_s": 1.92,
+   "server_latency_p50_s": 1.92,
+   "money": 0.012,
+   "secrecy": 0.017,
+   "authority": 0.025,
+   "urgency": 0.215,
+   "scam_type": "none",
+   "scam_type_conf": 0.991,
+   "risk_0_100": 0,
+   "risk_not_low": 0,
+   "risk_probs": {
+    "low": 0.996,
+    "medium": 0.003,
+    "high": 0.001,
+    "critical": 0.0
+   }
+  },
+  {
+   "id": "pl_scam_01_police",
+   "label": "scam",
+   "expected_type": "police",
+   "input_tokens": 4476,
+   "latency_p50_s": 1.908,
+   "server_latency_p50_s": 1.907,
+   "money": 0.865,
+   "secrecy": 0.988,
+   "authority": 0.94,
+   "urgency": 0.984,
+   "scam_type": "police",
+   "scam_type_conf": 0.872,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.013,
+    "medium": 0.178,
+    "high": 0.726,
+    "critical": 0.084
+   }
+  },
+  {
+   "id": "pl_scam_02_grandchild",
+   "label": "scam",
+   "expected_type": "grandchild",
+   "input_tokens": 4740,
+   "latency_p50_s": 1.893,
+   "server_latency_p50_s": 1.892,
+   "money": 0.872,
+   "secrecy": 0.955,
+   "authority": 0.079,
+   "urgency": 0.966,
+   "scam_type": "grandchild",
+   "scam_type_conf": 0.988,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.014,
+    "medium": 0.138,
+    "high": 0.777,
+    "critical": 0.071
+   }
+  },
+  {
+   "id": "pl_scam_03_bank",
+   "label": "scam",
+   "expected_type": "bank",
+   "input_tokens": 4488,
+   "latency_p50_s": 1.876,
+   "server_latency_p50_s": 1.875,
+   "money": 0.974,
+   "secrecy": 0.941,
+   "authority": 0.402,
+   "urgency": 0.979,
+   "scam_type": "bank",
+   "scam_type_conf": 0.991,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.007,
+    "medium": 0.109,
+    "high": 0.86,
+    "critical": 0.024
+   }
+  },
+  {
+   "id": "pl_scam_04_cbs",
+   "label": "scam",
+   "expected_type": "police",
+   "input_tokens": 4452,
+   "latency_p50_s": 1.958,
+   "server_latency_p50_s": 1.958,
+   "money": 0.938,
+   "secrecy": 0.97,
+   "authority": 0.921,
+   "urgency": 0.795,
+   "scam_type": "police",
+   "scam_type_conf": 0.97,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.012,
+    "medium": 0.127,
+    "high": 0.809,
+    "critical": 0.052
+   }
+  },
+  {
+   "id": "pl_scam_05_investment",
+   "label": "scam",
+   "expected_type": "other",
+   "input_tokens": 4392,
+   "latency_p50_s": 1.826,
+   "server_latency_p50_s": 1.826,
+   "money": 0.943,
+   "secrecy": 0.245,
+   "authority": 0.288,
+   "urgency": 0.975,
+   "scam_type": "other",
+   "scam_type_conf": 0.811,
+   "risk_0_100": 64,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.009,
+    "medium": 0.095,
+    "high": 0.856,
+    "critical": 0.04
+   }
+  }
+ ]
+}

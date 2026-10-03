@@ -1,0 +1,9 @@
+Caller: Good morning, this is Sarah calling from the Riverside medical practice. Am I speaking with Mrs. Margaret Taylor?
+Senior: Yes, good morning.
+Caller: I'm just calling to remind you of your appointment with Dr. Patel this Thursday at half past ten for your blood pressure review. Is that still convenient?
+Senior: Yes, I'll be there. Do I need to bring anything?
+Caller: Please bring a list of the medicines you are currently taking, and if you have a home blood pressure monitor, the readings from the last two weeks would be helpful. There's no charge for the appointment.
+Senior: My daughter will drive me, is there parking?
+Caller: Yes, there are a few spaces behind the building, and a disabled bay right by the entrance. If you can't make it, just give the reception a ring the day before so we can offer the slot to someone else.
+Senior: Thank you, dear, that's very kind.
+Caller: You're welcome. See you on Thursday. Goodbye.
