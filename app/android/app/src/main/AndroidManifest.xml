@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Call audio (CallEngine VoiceAudio), requested at runtime when the senior answers. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Incoming-call and scam alerts, requested at runtime on Android 13+. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
       android:name=".MainApplication"
@@ -22,5 +26,14 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+      <!-- Call screening (stub, allows all calls; see ScreeningService.kt). Needs the call-screening role. -->
+      <service
+        android:name=".callengine.ScreeningService"
+        android:permission="android.permission.BIND_SCREENING_SERVICE"
+        android:exported="true">
+        <intent-filter>
+          <action android:name="android.telecom.CallScreeningService" />
+        </intent-filter>
+      </service>
     </application>
 </manifest>
