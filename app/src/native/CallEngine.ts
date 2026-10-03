@@ -105,6 +105,16 @@ export const CallEngine = {
   saveSettings(json: string): Promise<void> {
     return native().saveSettings(json);
   },
+  async pickTrustedPerson(): Promise<{name: string; number: string} | null> {
+    const json = await native().pickTrustedPerson();
+    return json ? (JSON.parse(json) as {name: string; number: string}) : null;
+  },
+  pickWhitelistContacts(): Promise<number> {
+    return native().pickWhitelistContacts();
+  },
+  getWhitelistCount(): Promise<number> {
+    return native().getWhitelistCount();
+  },
   addListener<K extends keyof CallEngineEvents>(
     event: K,
     listener: (payload: CallEngineEvents[K]) => void,

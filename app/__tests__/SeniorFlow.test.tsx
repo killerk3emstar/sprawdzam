@@ -23,6 +23,9 @@ jest.mock('../src/native/NativeCallEngine', () => ({
     requestNotificationPermission: jest.fn(() => Promise.resolve(true)),
     loadSettings: jest.fn(() => Promise.resolve('{"lang":"en","notificationsAsked":true}')),
     saveSettings: jest.fn(() => Promise.resolve()),
+    pickTrustedPerson: jest.fn(() => Promise.resolve('{"name":"Anna","number":"+48600100200"}')),
+    pickWhitelistContacts: jest.fn(() => Promise.resolve(3)),
+    getWhitelistCount: jest.fn(() => Promise.resolve(0)),
   },
 }));
 
@@ -110,4 +113,23 @@ test('the backend dropping the control channel shows the amber state', async () 
   await emit(EV.protectionStatus, {available: true, connected: true});
   await emit(EV.protectionStatus, {available: false, connected: false});
   expect(r.root.findAllByProps({testID: 'status-unavailable'}).length).toBeGreaterThan(0);
+});
+
+test('settings: trusted person from the contact picker is saved, whitelist count shown', async () => {
+  let r!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => {
+    r = ReactTestRenderer.create(<App />);
+  });
+  await press(r, 'open-settings');
+  expect(text(r)).toContain('Not chosen');
+  await ReactTestRenderer.act(async () => {
+    r.root.findByProps({accessibilityLabel: 'Choose from contacts'}).props.onPress();
+  });
+  expect(text(r)).toContain('Anna');
+  const saved = JSON.parse(native.saveSettings.mock.calls.at(-1)[0]);
+  expect(saved.trustedPerson).toEqual({name: 'Anna', number: '+48600100200'});
+  await ReactTestRenderer.act(async () => {
+    r.root.findByProps({accessibilityLabel: 'Choose contacts'}).props.onPress();
+  });
+  expect(text(r)).toContain('Numbers from contacts: 3');
 });

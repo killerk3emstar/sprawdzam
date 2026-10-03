@@ -10,6 +10,7 @@ import { asset } from '@kit.AssetStoreKit';
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { TrustedPersonInfo } from './Protocol';
 
 const DOMAIN: number = 0x5350;
 const TAG: string = 'CallEngine';
@@ -74,6 +75,21 @@ export class SettingsStore {
       return value === undefined || value === null ? fallback : String(value);
     } catch (e) {
       return fallback;
+    }
+  }
+
+  /** The trusted person from the stored settings ({name, number}) or null. */
+  getTrustedPerson(): TrustedPersonInfo | null {
+    try {
+      const record = JSON.parse(this.prefs.getSync(KEY_SETTINGS, '{}') as string) as Record<string, Object>;
+      const tp = record['trustedPerson'] as Record<string, Object> | null | undefined;
+      if (tp === undefined || tp === null || tp['number'] === undefined) {
+        return null;
+      }
+      const info: TrustedPersonInfo = { name: String(tp['name'] ?? ''), number: String(tp['number']) };
+      return info;
+    } catch (e) {
+      return null;
     }
   }
 

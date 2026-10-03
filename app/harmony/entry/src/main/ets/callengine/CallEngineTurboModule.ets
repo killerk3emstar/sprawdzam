@@ -4,10 +4,12 @@
  * DeviceEventEmitter. Audio and the one-time call token never reach JS.
  */
 import { UITurboModule } from '@rnoh/react-native-openharmony/ts';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { TM } from '@rnoh/react-native-openharmony/generated/ts';
 import { requestMicrophone } from './AudioSpike';
 import { CallEngineCore, CallEngineListener } from './CallEngineCore';
 import { CallNotifier } from './CallNotifier';
+import { ContactsBridge } from './ContactsBridge';
 import { SettingsStore } from './SettingsStore';
 import {
   CallActiveEvent,
@@ -23,6 +25,7 @@ import {
   IncomingCallEvent,
   ProtectionStatusEvent,
   RiskEvent,
+  SettingsMessage,
   VerifyPasswordEvent
 } from './Protocol';
 
@@ -32,6 +35,14 @@ export class CallEngineTurboModule extends UITurboModule implements TM.CallEngin
   private core: CallEngineCore = new CallEngineCore(this);
   private notifierValue: CallNotifier | null = null;
   private settingsValue: SettingsStore | null = null;
+  private contactsValue: ContactsBridge | null = null;
+
+  private get contacts(): ContactsBridge {
+    if (this.contactsValue === null) {
+      this.contactsValue = new ContactsBridge(this.ctx.uiAbilityContext);
+    }
+    return this.contactsValue;
+  }
 
   private get notifier(): CallNotifier {
     if (this.notifierValue === null) {
@@ -101,9 +112,43 @@ export class CallEngineTurboModule extends UITurboModule implements TM.CallEngin
   async saveSettings(json: string): Promise<void> {
     await this.settings.save(json);
     this.notifier.setLanguage(this.settings.getString('lang', 'pl'));
+    this.sendSettingsToBackend();
+  }
+
+  async pickTrustedPerson(): Promise<string> {
+    const picked = await this.contacts.pickOne();
+    return picked === null ? '' : JSON.stringify(picked);
+  }
+
+  async pickWhitelistContacts(): Promise<number> {
+    const count = await this.contacts.pickWhitelist();
+    this.sendSettingsToBackend();
+    return count;
+  }
+
+  getWhitelistCount(): Promise<number> {
+    return Promise.resolve(this.contacts.whitelist().length);
+  }
+
+  /** Sends the settings extension message (language, trusted person, whitelist) on the control channel. */
+  private sendSettingsToBackend(): void {
+    const msg: SettingsMessage = {
+      type: 'settings',
+      lang: this.settings.getString('lang', 'pl'),
+      trustedPerson: this.settings.getTrustedPerson(),
+      whitelist: this.contacts.whitelist()
+    };
+    if (this.core.controlChannel.sendText(JSON.stringify(msg))) {
+      hilog.info(0x5350, 'CallEngine', 'control: settings sent (whitelist %{public}d numbers, trusted person %{public}s)',
+        msg.whitelist.length, msg.trustedPerson === null ? 'none' : 'set');
+    }
   }
 
   // --- Native -> JS events (plus system notifications for the senior) ---
+
+  onControlOpen(): void {
+    this.sendSettingsToBackend();
+  }
 
   onIncomingCall(event: IncomingCallEvent): void {
     this.notifier.incomingCall(event.caller);

@@ -24,6 +24,7 @@ const DOMAIN: number = 0x5350;
 const TAG: string = 'CallEngine';
 
 export interface CallEngineListener {
+  onControlOpen(): void;
   onIncomingCall(event: IncomingCallEvent): void;
   onCallActive(event: CallActiveEvent): void;
   onRisk(event: RiskEvent): void;
@@ -89,6 +90,10 @@ export class CallEngineCore implements ControlListener, CallListener {
   }
 
   // --- ControlListener ---
+
+  onControlOpen(): void {
+    this.listener.onControlOpen();
+  }
 
   onIncomingCall(info: IncomingCallInfo): void {
     const current = this.call;

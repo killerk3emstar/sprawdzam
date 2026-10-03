@@ -31,6 +31,14 @@ export interface Spec extends TurboModule {
   loadSettings(): Promise<string>;
   /** Stores the settings JSON (the device token goes to secure storage natively). */
   saveSettings(json: string): Promise<void>;
+  /** System contact picker (no contacts permission). Resolves JSON {name, number}, or "" if cancelled. */
+  pickTrustedPerson(): Promise<string>;
+  /**
+   * Multi-select contact picker for the whitelist (calls that ring normally). The numbers stay native and
+   * are sent to the backend only over the control channel; resolves the number count.
+   */
+  pickWhitelistContacts(): Promise<number>;
+  getWhitelistCount(): Promise<number>;
 }
 
 export default TurboModuleRegistry.get<Spec>('CallEngine');

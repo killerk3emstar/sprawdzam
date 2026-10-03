@@ -72,6 +72,9 @@ class CallSpike implements CallEngineListener {
     this.core.connectControl(this.opts.url, this.opts.token);
   }
 
+  onControlOpen(): void {
+  }
+
   onProtectionStatus(event: ProtectionStatusEvent): void {
     hilog.info(DOMAIN, TAG, 'spike: protection connected=%{public}s available=%{public}s', String(event.connected),
       String(event.available));

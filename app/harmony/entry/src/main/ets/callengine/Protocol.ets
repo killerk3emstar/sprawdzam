@@ -45,6 +45,24 @@ export interface ClientMessage {
   digits?: string;
 }
 
+export interface TrustedPersonInfo {
+  name: string;
+  number: string;
+}
+
+/**
+ * Extension of protocol v0 (proposed by the app, not yet in APP_PROTOCOL.md):
+ * app -> backend on the control channel after every (re)connect and whenever settings change:
+ * {"type":"settings","lang":"pl","trustedPerson":{"name","number"}|null,"whitelist":["+48..."]}
+ * The whitelist holds personal data: it is sent only on this channel and never logged.
+ */
+export interface SettingsMessage {
+  type: string;
+  lang: string;
+  trustedPerson: TrustedPersonInfo | null;
+  whitelist: string[];
+}
+
 // Events emitted to JS (DeviceEventEmitter). Names are prefixed to avoid clashes with other modules.
 export const EVENT_INCOMING_CALL: string = 'CallEngine.onIncomingCall';
 export const EVENT_CALL_ACTIVE: string = 'CallEngine.onCallActive';

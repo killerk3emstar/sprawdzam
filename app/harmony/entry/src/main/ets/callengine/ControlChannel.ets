@@ -25,6 +25,8 @@ const PING_INTERVAL_MS: number = 15000;
 const BACKOFF_MS: number[] = [1000, 2000, 5000, 10000];
 
 export interface ControlListener {
+  /** The control channel is open (initial connect and every reconnect). */
+  onControlOpen(): void;
   onIncomingCall(info: IncomingCallInfo): void;
   onProtectionStatus(event: ProtectionStatusEvent): void;
   onError(event: ErrorEvent): void;
@@ -99,6 +101,7 @@ export class ControlChannel {
       // The backoff resets on the first valid message, not on open: a rejected token (1008) also opens first.
       this.setStatus(true, this.serverAvailable);
       this.startPing();
+      this.listener.onControlOpen();
     });
     ws.on('message', (err: BusinessError, value: string | ArrayBuffer) => {
       if (generation !== this.generation || err || typeof value !== 'string') {

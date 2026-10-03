@@ -158,6 +158,12 @@ The source of truth is `docs/APP_PROTOCOL.md` in the server repository (branch `
 - `call_ended` reasons: `caller_hangup`, `senior_hangup`, `scam_blocked`, `timeout`, `error`. A call channel that closes without `call_ended` ends with `error` (1008 also emits `error` `call_auth_failed`).
 - Unknown message types and fields are ignored. `ws://` only on the localhost dev path; production uses `wss://`.
 
+### Contacts, settings and notifications (HarmonyOS)
+
+- Trusted person and whitelist come from the system contact picker (`contact.selectContacts`, Contacts Kit). No contacts permission is needed (`READ_CONTACTS` is ACL-restricted on HarmonyOS). Whitelist numbers stay native and are sent only over the control channel in the `settings` message (see `../docs/APP_PROTOCOL_EXTENSIONS.md`); the app logs counts only.
+- Settings are stored in Preferences; the device token in Asset Store Kit.
+- Notification Kit: incoming protected call, warn/high risk, blocked scam (permission requested on first start).
+
 ### Audio on the DevEco emulator
 
 - The macOS host must allow the emulator to use the microphone. While that was being sorted out, the first capture runs stalled (VOICE_COMMUNICATION after 3 buffers; MIC after about 8 s, then `stop()` failed with 6800301). After that, 10 s runs of MIC and VOICE_COMMUNICATION at 16 kHz and 48 kHz all delivered continuous buffers (16 kHz: about 32.6 kB/s, 51 callbacks of 640 B per second) and stopped cleanly.

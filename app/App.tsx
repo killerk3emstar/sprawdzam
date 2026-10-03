@@ -27,7 +27,25 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
   const engine = useCallEngine(settings.controlUrl, settings.deviceToken);
   const [route, setRoute] = useState<Route>('home');
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean | null>(null);
+  const [whitelistCount, setWhitelistCount] = useState<number | null>(null);
   const {call} = engine;
+
+  useEffect(() => {
+    if (engine.available) {
+      CallEngine.getWhitelistCount().then(setWhitelistCount, () => setWhitelistCount(null));
+    }
+  }, [engine.available]);
+
+  const pickTrustedPerson = useCallback(() => {
+    CallEngine.pickTrustedPerson().then(
+      person => person && onSettingsChange({...settings, trustedPerson: person}),
+      () => {},
+    );
+  }, [settings, onSettingsChange]);
+
+  const syncContacts = useCallback(() => {
+    CallEngine.pickWhitelistContacts().then(setWhitelistCount, () => {});
+  }, []);
 
   const requestNotifications = useCallback(() => {
     if (!engine.available) {
@@ -76,10 +94,10 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
       <SettingsScreen
         settings={settings}
         notificationsEnabled={notificationsEnabled}
-        whitelistCount={null}
+        whitelistCount={whitelistCount}
         onChange={onSettingsChange}
-        onPickTrustedPerson={null}
-        onSyncContacts={null}
+        onPickTrustedPerson={engine.available ? pickTrustedPerson : null}
+        onSyncContacts={engine.available ? syncContacts : null}
         onEnableNotifications={requestNotifications}
         onOpenDev={() => setRoute('dev')}
         onBack={() => setRoute('home')}

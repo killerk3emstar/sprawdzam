@@ -33,6 +33,12 @@ class CallEngineModule(reactContext: ReactApplicationContext) : NativeCallEngine
 
   override fun saveSettings(json: String, promise: Promise) = notImplemented(promise)
 
+  override fun pickTrustedPerson(promise: Promise) = notImplemented(promise)
+
+  override fun pickWhitelistContacts(promise: Promise) = notImplemented(promise)
+
+  override fun getWhitelistCount(promise: Promise) = notImplemented(promise)
+
   private fun notImplemented(promise: Promise) {
     promise.reject(ERROR_NOT_IMPLEMENTED, "CallEngine is not implemented on Android yet")
   }
