@@ -54,7 +54,7 @@ test('senior flow from incoming call to blocked scam', async () => {
   await ReactTestRenderer.act(async () => {
     r = ReactTestRenderer.create(<App />);
   });
-  expect(native.connectControl).toHaveBeenCalledWith('ws://127.0.0.1:8765/app/control', 'dev-device-1');
+  expect(native.connectControl).toHaveBeenCalledWith('ws://localhost:8765/app/control', 'dev-device-1-sprawdzam');
 
   await emit(EV.protectionStatus, {available: true, connected: true});
   expect(text(r)).toContain('You are protected');

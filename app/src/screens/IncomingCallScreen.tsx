@@ -27,7 +27,12 @@ export function IncomingCallScreen({caller, connecting, error, onAccept, onRejec
       <StatusBar barStyle="light-content" backgroundColor={colors.callBackground} />
       <View style={styles.top}>
         <Text style={styles.label}>{t('incomingTitle')}</Text>
-        <Text style={styles.caller} accessibilityRole="header">
+        <Text
+          style={styles.caller}
+          accessibilityRole="header"
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}>
           {shown}
         </Text>
         <Text style={styles.protected}>{t('incomingProtected')}</Text>
@@ -54,7 +59,8 @@ const styles = StyleSheet.create({
   inner: {flex: 1, paddingHorizontal: size.padding},
   top: {flex: 1, alignItems: 'center', justifyContent: 'center'},
   label: {fontSize: font.large, color: colors.onCallMuted},
-  caller: {fontSize: font.huge, fontWeight: '800', color: colors.onCall, marginTop: 16, textAlign: 'center'},
+  // 40 pt keeps a masked number ("+48 *** *** 123") on one line on a 360 dp wide phone.
+  caller: {fontSize: font.title, fontWeight: '800', color: colors.onCall, marginTop: 16, textAlign: 'center'},
   protected: {fontSize: font.body, color: colors.onCallMuted, marginTop: 20, textAlign: 'center'},
   error: {fontSize: font.body, color: '#FFCDD2', marginTop: 16, textAlign: 'center'},
   actions: {gap: 20, paddingBottom: 32},

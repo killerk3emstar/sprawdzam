@@ -177,15 +177,15 @@ The source of truth is `docs/APP_PROTOCOL.md` in the server repository (branch `
 
 ```bash
 cd app
-uv run --with websockets python tools/fake_backend.py --port 8765 --call-after 3   # see --help for scenarios
-hdc -t 127.0.0.1:5555 rport tcp:8765 tcp:8765
-# a) from JS: open the app, tap Connect, then Accept
+uv run --with websockets python tools/fake_backend.py --port 8766 --call-after 3   # see --help for scenarios
+hdc -t 127.0.0.1:5555 rport tcp:8766 tcp:8766
+# a) from JS: Settings > Developer > Server address ws://localhost:8766/app/control, Save and connect
 # b) natively, without JS (logs: hdc hilog | grep CallEngine):
 hdc -t 127.0.0.1:5555 shell aa start -a EntryAbility -b pl.sprawdzam.app --ps spike call \
-  --ps mode accept|reject|ignore --ps ring 2 --ps secs 16 --ps dtmf 1234
+  --ps url ws://localhost:8766/app/control --ps mode accept|reject|ignore --ps ring 2 --ps secs 16 --ps dtmf 1234
 ```
 
-Fake backend options: `--scenario scam|benign`, `--password 1234`, `--password-timeout 20`, `--caller-hangup N`, `--idle 45`, `--device-token X` (1008 for any other token). Port 8000 is used by `basal-serve` on the dev Mac and 8765 is the real backend's dev port, so run the fake backend on another port and map it to the app's default URL: `uv run --with websockets python tools/fake_backend.py --port 8766` and `hdc -t 127.0.0.1:5555 rport tcp:8765 tcp:8766`. The fake backend sends only zero PCM frames, so nothing is audible.
+Fake backend options: `--scenario scam|benign`, `--password 1234`, `--password-timeout 20`, `--caller-hangup N`, `--idle 45`, `--device-token X` (1008 for any other token). Ports: 8000 on the dev Mac is `basal-serve`, 8765 is the real backend's dev port (the app's default `ws://localhost:8765/app/control`, token `dev-device-1-sprawdzam`; the backend requires at least 16 characters), so the fake backend uses 8766. The fake backend sends only zero PCM frames, so nothing is audible.
 
 Verified on the emulator (2026-10-03, native path): accept + correct password (call continues, then `senior_hangup`), wrong password (`scam_blocked` after the timeout), reject while ringing (`senior_hangup`), ignore (`timeout` after 30 s), `caller_hangup`, wrong device token (1008, backoff 1/2/5/10 s), 4000 idle close followed by a reconnect.
 

@@ -17,15 +17,20 @@ export type Settings = {
   systemCallUi: boolean;
 };
 
-// Dev defaults: fake/dev backend through `hdc rport tcp:8765 tcp:8765`. Production uses wss://.
+// Dev defaults: the backend's dev port on the Mac, reached through `hdc rport tcp:8765 tcp:8765`.
+// The backend requires a device token of at least 16 characters. Production uses wss:// and a real token.
 export const DEFAULT_SETTINGS: Settings = {
   lang: 'pl',
-  controlUrl: 'ws://127.0.0.1:8765/app/control',
-  deviceToken: 'dev-device-1',
+  controlUrl: 'ws://localhost:8765/app/control',
+  deviceToken: 'dev-device-1-sprawdzam',
   trustedPerson: null,
   notificationsAsked: false,
   systemCallUi: false,
 };
+
+// Earlier dev defaults that were stored on test devices; replaced by the current defaults on load.
+const LEGACY_CONTROL_URLS = ['ws://127.0.0.1:8765/app/control'];
+const LEGACY_DEVICE_TOKENS = ['dev-device-1'];
 
 export function parseSettings(json: string): Settings {
   let raw: Partial<Settings> = {};
@@ -35,6 +40,12 @@ export function parseSettings(json: string): Settings {
     raw = {};
   }
   const tp = raw.trustedPerson;
+  if (typeof raw.controlUrl === 'string' && LEGACY_CONTROL_URLS.includes(raw.controlUrl)) {
+    raw.controlUrl = DEFAULT_SETTINGS.controlUrl;
+  }
+  if (typeof raw.deviceToken === 'string' && LEGACY_DEVICE_TOKENS.includes(raw.deviceToken)) {
+    raw.deviceToken = DEFAULT_SETTINGS.deviceToken;
+  }
   return {
     lang: raw.lang === 'en' ? 'en' : raw.lang === 'pl' ? 'pl' : DEFAULT_SETTINGS.lang,
     controlUrl: typeof raw.controlUrl === 'string' && raw.controlUrl ? raw.controlUrl : DEFAULT_SETTINGS.controlUrl,

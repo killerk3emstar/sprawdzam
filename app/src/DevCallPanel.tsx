@@ -18,8 +18,8 @@ import {
 
 // Dev backend reached through `hdc rport tcp:8765 tcp:8765` (port 8000 is taken by basal-serve on the dev Mac).
 // Production uses wss://.
-const DEFAULT_CONTROL_URL = 'ws://127.0.0.1:8765/app/control';
-const DEFAULT_DEVICE_TOKEN = 'dev-device-1';
+const DEFAULT_CONTROL_URL = 'ws://localhost:8765/app/control';
+const DEFAULT_DEVICE_TOKEN = 'dev-device-1-sprawdzam';
 const MAX_LOG = 8;
 
 type CallState = 'idle' | 'ringing' | 'connecting' | 'active';

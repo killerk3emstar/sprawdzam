@@ -49,7 +49,12 @@ export function InCallScreen({call, onHangup, onSendPassword, onEnterAgain}: Pro
       <StatusBar barStyle="light-content" backgroundColor={colors.callBackground} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={compact ? styles.headerRow : null}>
-          <Text style={[styles.caller, compact ? styles.callerCompact : null]} accessibilityRole="header">
+          <Text
+            style={[styles.caller, compact ? styles.callerCompact : null]}
+            accessibilityRole="header"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}>
             {caller}
           </Text>
           <Text style={[styles.timer, compact ? styles.timerCompact : null]} testID="call-timer">
