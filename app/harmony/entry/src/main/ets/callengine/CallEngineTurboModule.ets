@@ -7,6 +7,8 @@ import { UITurboModule } from '@rnoh/react-native-openharmony/ts';
 import { TM } from '@rnoh/react-native-openharmony/generated/ts';
 import { requestMicrophone } from './AudioSpike';
 import { CallEngineCore, CallEngineListener } from './CallEngineCore';
+import { CallNotifier } from './CallNotifier';
+import { SettingsStore } from './SettingsStore';
 import {
   CallActiveEvent,
   CallEndedEvent,
@@ -28,6 +30,23 @@ export class CallEngineTurboModule extends UITurboModule implements TM.CallEngin
   public static readonly NAME: string = TM.CallEngine.NAME;
 
   private core: CallEngineCore = new CallEngineCore(this);
+  private notifierValue: CallNotifier | null = null;
+  private settingsValue: SettingsStore | null = null;
+
+  private get notifier(): CallNotifier {
+    if (this.notifierValue === null) {
+      this.notifierValue = new CallNotifier(this.ctx.uiAbilityContext);
+      this.notifierValue.setLanguage(this.settings.getString('lang', 'pl'));
+    }
+    return this.notifierValue;
+  }
+
+  private get settings(): SettingsStore {
+    if (this.settingsValue === null) {
+      this.settingsValue = new SettingsStore(this.ctx.uiAbilityContext);
+    }
+    return this.settingsValue;
+  }
 
   // --- Spec (JS -> native) ---
 
@@ -71,9 +90,23 @@ export class CallEngineTurboModule extends UITurboModule implements TM.CallEngin
     }
   }
 
-  // --- Native -> JS events ---
+  requestNotificationPermission(): Promise<boolean> {
+    return this.notifier.requestPermission();
+  }
+
+  loadSettings(): Promise<string> {
+    return Promise.resolve(this.settings.load());
+  }
+
+  async saveSettings(json: string): Promise<void> {
+    await this.settings.save(json);
+    this.notifier.setLanguage(this.settings.getString('lang', 'pl'));
+  }
+
+  // --- Native -> JS events (plus system notifications for the senior) ---
 
   onIncomingCall(event: IncomingCallEvent): void {
+    this.notifier.incomingCall(event.caller);
     this.ctx.rnInstance.emitDeviceEvent(EVENT_INCOMING_CALL, event);
   }
 
@@ -86,6 +119,7 @@ export class CallEngineTurboModule extends UITurboModule implements TM.CallEngin
   }
 
   onRisk(event: RiskEvent): void {
+    this.notifier.risk(event.level);
     this.ctx.rnInstance.emitDeviceEvent(EVENT_RISK, event);
   }
 
@@ -94,6 +128,7 @@ export class CallEngineTurboModule extends UITurboModule implements TM.CallEngin
   }
 
   onCallEnded(event: CallEndedEvent): void {
+    this.notifier.callEnded(event.reason);
     this.ctx.rnInstance.emitDeviceEvent(EVENT_CALL_ENDED, event);
   }
 

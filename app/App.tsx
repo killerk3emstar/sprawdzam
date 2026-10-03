@@ -1,100 +1,158 @@
 /**
- * Sprawdzam / Second Ear: hello-world screen with the CallEngine developer panel.
- * Shared by the HarmonyOS (RNOH) and Android builds.
- * Real screens (protection status, incoming call, alerts) come later.
+ * Sprawdzam / Second Ear: senior UI (minimal, large, high-contrast), shared by HarmonyOS (RNOH) and Android.
+ *
+ * Routing: an incoming or active call always takes over the screen; otherwise Home, Settings or the
+ * developer panel (long-press the app name on Home for 2 s).
  *
  * @format
  */
 
-import React from 'react';
-import {
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, {useCallback, useEffect, useState} from 'react';
+import {Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {DevCallPanel} from './src/DevCallPanel';
+import {I18nProvider} from './src/i18n';
+import {CallEngine} from './src/native/CallEngine';
+import {CallEndedScreen} from './src/screens/CallEndedScreen';
+import {HomeScreen} from './src/screens/HomeScreen';
+import {InCallScreen} from './src/screens/InCallScreen';
+import {IncomingCallScreen} from './src/screens/IncomingCallScreen';
+import {SettingsScreen} from './src/screens/SettingsScreen';
+import {DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings} from './src/settings';
+import {colors, font} from './src/theme';
+import {useCallEngine} from './src/useCallEngine';
 
-const COLORS = {
-  background: '#F4F7FB',
-  card: '#FFFFFF',
-  primary: '#0B4F8A',
-  text: '#13212F',
-  muted: '#4A5A6A',
-};
+type Route = 'home' | 'settings' | 'dev';
+
+function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChange: (s: Settings) => void}): React.JSX.Element {
+  const engine = useCallEngine(settings.controlUrl, settings.deviceToken);
+  const [route, setRoute] = useState<Route>('home');
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean | null>(null);
+  const {call} = engine;
+
+  const requestNotifications = useCallback(() => {
+    if (!engine.available) {
+      return;
+    }
+    CallEngine.requestNotificationPermission().then(setNotificationsEnabled, () => setNotificationsEnabled(false));
+  }, [engine.available]);
+
+  // Ask for notifications once, on the first start.
+  useEffect(() => {
+    if (engine.available && !settings.notificationsAsked) {
+      onSettingsChange({...settings, notificationsAsked: true});
+      requestNotifications();
+    }
+  }, [engine.available, settings, onSettingsChange, requestNotifications]);
+
+  if (route !== 'dev') {
+    if (call.phase === 'ringing' || call.phase === 'connecting') {
+      return (
+        <IncomingCallScreen
+          caller={call.caller}
+          connecting={call.phase === 'connecting'}
+          error={call.error}
+          onAccept={engine.accept}
+          onReject={engine.reject}
+        />
+      );
+    }
+    if (call.phase === 'active') {
+      return (
+        <InCallScreen
+          call={call}
+          onHangup={engine.hangup}
+          onSendPassword={engine.sendPassword}
+          onEnterAgain={engine.enterPasswordAgain}
+        />
+      );
+    }
+    if (call.phase === 'ended' && call.endReason) {
+      return <CallEndedScreen reason={call.endReason} onOk={engine.dismissEnded} />;
+    }
+  }
+
+  if (route === 'settings') {
+    return (
+      <SettingsScreen
+        settings={settings}
+        notificationsEnabled={notificationsEnabled}
+        whitelistCount={null}
+        onChange={onSettingsChange}
+        onPickTrustedPerson={null}
+        onSyncContacts={null}
+        onEnableNotifications={requestNotifications}
+        onOpenDev={() => setRoute('dev')}
+        onBack={() => setRoute('home')}
+      />
+    );
+  }
+
+  if (route === 'dev') {
+    return (
+      <SafeAreaView style={styles.devRoot}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+        <ScrollView contentContainerStyle={styles.devContent} keyboardShouldPersistTaps="handled">
+          <Pressable accessibilityRole="button" onPress={() => setRoute('home')} style={styles.devBack}>
+            <Text style={styles.devBackText}>← Sprawdzam</Text>
+          </Pressable>
+          <DevCallPanel initialUrl={settings.controlUrl} deviceToken={settings.deviceToken} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  const protectedNow = !!engine.protection?.available && !!engine.protection?.connected;
+  return (
+    <HomeScreen
+      protectedNow={protectedNow}
+      trustedPersonName={settings.trustedPerson?.name ?? null}
+      onOpenSettings={() => setRoute('settings')}
+      onOpenDev={() => setRoute('dev')}
+    />
+  );
+}
 
 function App(): React.JSX.Element {
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadSettings().then(
+      s => !cancelled && setSettings(s),
+      () => !cancelled && setSettings(DEFAULT_SETTINGS),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onSettingsChange = useCallback((next: Settings) => {
+    setSettings(next);
+    saveSettings(next);
+  }, []);
+
+  if (!settings) {
+    return (
+      <View style={styles.splash}>
+        <Text style={styles.splashText}>Sprawdzam</Text>
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title} accessibilityRole="header">
-          Sprawdzam
-        </Text>
-        <Text style={styles.subtitle}>Second Ear</Text>
-
-        <View style={styles.card}>
-          <Text style={styles.line}>
-            Ochrona przed oszustwami telefonicznymi
-          </Text>
-          <Text style={styles.line}>Protection against phone scams</Text>
-        </View>
-
-        <Text style={styles.platform} testID="platform-label">
-          Platform: {Platform.OS}
-        </Text>
-
-        <DevCallPanel />
-      </ScrollView>
-    </SafeAreaView>
+    <I18nProvider lang={settings.lang}>
+      <Main settings={settings} onSettingsChange={onSettingsChange} />
+    </I18nProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  content: {
-    flexGrow: 1,
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-  },
-  title: {
-    fontSize: 40,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 22,
-    fontWeight: '500',
-    color: COLORS.muted,
-  },
-  card: {
-    marginTop: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    backgroundColor: COLORS.card,
-    alignSelf: 'stretch',
-  },
-  line: {
-    fontSize: 22,
-    lineHeight: 30,
-    color: COLORS.text,
-    textAlign: 'center',
-    marginVertical: 6,
-  },
-  platform: {
-    marginTop: 12,
-    fontSize: 16,
-    color: COLORS.muted,
-  },
+  splash: {flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background},
+  splashText: {fontSize: font.title, fontWeight: '800', color: colors.primary},
+  devRoot: {flex: 1, backgroundColor: colors.surface},
+  devContent: {padding: 16},
+  devBack: {minHeight: 56, justifyContent: 'center'},
+  devBackText: {fontSize: font.body, color: colors.primary, fontWeight: '700'},
 });
 
 export default App;

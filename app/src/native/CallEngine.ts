@@ -96,6 +96,15 @@ export const CallEngine = {
   sendDtmf(digits: string): Promise<void> {
     return native().sendDtmf(digits);
   },
+  requestNotificationPermission(): Promise<boolean> {
+    return native().requestNotificationPermission();
+  },
+  loadSettings(): Promise<string> {
+    return native().loadSettings();
+  },
+  saveSettings(json: string): Promise<void> {
+    return native().saveSettings(json);
+  },
   addListener<K extends keyof CallEngineEvents>(
     event: K,
     listener: (payload: CallEngineEvents[K]) => void,

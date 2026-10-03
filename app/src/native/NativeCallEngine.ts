@@ -25,6 +25,12 @@ export interface Spec extends TurboModule {
   hangup(): Promise<void>;
   /** Sends keypad digits (0-9, *, #; 1-32 characters), e.g. the family password. */
   sendDtmf(digits: string): Promise<void>;
+  /** Shows the system dialog to allow notifications if needed. Resolves true when enabled. */
+  requestNotificationPermission(): Promise<boolean>;
+  /** Returns the stored settings as JSON ("{}" when nothing is stored). */
+  loadSettings(): Promise<string>;
+  /** Stores the settings JSON (the device token goes to secure storage natively). */
+  saveSettings(json: string): Promise<void>;
 }
 
 export default TurboModuleRegistry.get<Spec>('CallEngine');

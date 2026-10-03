@@ -1,7 +1,7 @@
 /**
  * Developer panel that exercises the CallEngine end to end:
  * connect control socket -> incoming call -> accept -> risk updates / password prompt -> hang up.
- * Functional only; the real senior-facing screens come later.
+ * Functional only; reachable from the senior UI by long-pressing the app name (or Settings > Test panel).
  *
  * @format
  */
@@ -30,9 +30,11 @@ const RISK_COLORS: Record<string, string> = {
   high: '#C62828',
 };
 
-export function DevCallPanel(): React.JSX.Element {
+type Props = {initialUrl?: string; deviceToken?: string};
+
+export function DevCallPanel({initialUrl, deviceToken}: Props = {}): React.JSX.Element {
   const available = isCallEngineAvailable();
-  const [controlUrl, setControlUrl] = useState(DEFAULT_CONTROL_URL);
+  const [controlUrl, setControlUrl] = useState(initialUrl ?? DEFAULT_CONTROL_URL);
   const [status, setStatus] = useState<ProtectionStatus | null>(null);
   const [incoming, setIncoming] = useState<IncomingCall | null>(null);
   const [callState, setCallState] = useState<CallState>('idle');
@@ -138,7 +140,9 @@ export function DevCallPanel(): React.JSX.Element {
       <View style={styles.row}>
         <Button
           title="Connect"
-          onPress={() => run('connect', () => CallEngine.connectControl(controlUrl, DEFAULT_DEVICE_TOKEN))}
+          onPress={() =>
+            run('connect', () => CallEngine.connectControl(controlUrl, deviceToken ?? DEFAULT_DEVICE_TOKEN))
+          }
         />
         <Button title="Disconnect" onPress={() => run('disconnect', () => CallEngine.disconnectControl())} />
         <Button title="Mic" onPress={() => run('mic permission', () => CallEngine.requestMicrophonePermission())} />
