@@ -2,15 +2,19 @@
   "string": [
     {
       "name": "module_desc",
-      "value": ""
+      "value": "Sprawdzam / Second Ear: protection against phone scams"
     },
     {
       "name": "EntryAbility_desc",
-      "value": ""
+      "value": "Protected calls and scam alerts"
     },
     {
       "name": "EntryAbility_label",
       "value": "Sprawdzam"
+    },
+    {
+      "name": "microphone_reason",
+      "value": "Sprawdzam needs the microphone so you can talk during protected calls."
     }
   ]
 }
