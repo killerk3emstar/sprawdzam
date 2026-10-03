@@ -111,6 +111,7 @@ export class VoiceAudio {
   private restarts: number = 0;
   private restarting: boolean = false;
   private running: boolean = false;
+  private muted: boolean = false;
   private source: audio.SourceType = audio.SourceType.SOURCE_TYPE_MIC;
   private onFrame: FrameListener = () => {
   };
@@ -129,6 +130,7 @@ export class VoiceAudio {
     this.framesOut = 0;
     this.framesIn = 0;
     this.restarts = 0;
+    this.muted = false;
     this.source = source;
     this.onFrame = onFrame;
     this.onStall = onStall;
@@ -148,6 +150,11 @@ export class VoiceAudio {
     await this.startCapturer();
     this.stallTimer = setInterval(() => this.checkCapture(), STALL_CHECK_MS);
     hilog.info(DOMAIN, TAG, 'audio started (source=%{public}d renderer=%{public}d)', source, renderer.state);
+  }
+
+  /** Muted: keep sending frames (timing stays intact) but with silence. */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
   }
 
   /** Queues one frame of caller audio (binary WebSocket message) for playback. */
@@ -249,7 +256,7 @@ export class VoiceAudio {
       offset += n;
       if (this.pendingFill === FRAME_BYTES) {
         this.framesOut++;
-        this.onFrame(this.pending.buffer.slice(0));
+        this.onFrame(this.muted ? new ArrayBuffer(FRAME_BYTES) : this.pending.buffer.slice(0));
         this.pendingFill = 0;
       }
     }

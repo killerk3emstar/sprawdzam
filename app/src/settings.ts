@@ -13,6 +13,8 @@ export type Settings = {
   deviceToken: string;
   trustedPerson: TrustedPerson | null;
   notificationsAsked: boolean;
+  /** Experimental: also show protected calls in the system call UI (Call Service Kit). */
+  systemCallUi: boolean;
 };
 
 // Dev defaults: fake/dev backend through `hdc rport tcp:8765 tcp:8765`. Production uses wss://.
@@ -22,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   deviceToken: 'dev-device-1',
   trustedPerson: null,
   notificationsAsked: false,
+  systemCallUi: false,
 };
 
 export function parseSettings(json: string): Settings {
@@ -40,6 +43,7 @@ export function parseSettings(json: string): Settings {
     trustedPerson:
       tp && typeof tp.name === 'string' && typeof tp.number === 'string' ? {name: tp.name, number: tp.number} : null,
     notificationsAsked: raw.notificationsAsked === true,
+    systemCallUi: raw.systemCallUi === true,
   };
 }
 

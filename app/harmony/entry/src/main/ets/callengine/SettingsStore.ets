@@ -78,6 +78,10 @@ export class SettingsStore {
     }
   }
 
+  getBool(field: string): boolean {
+    return this.getString(field, 'false') === 'true';
+  }
+
   /** The trusted person from the stored settings ({name, number}) or null. */
   getTrustedPerson(): TrustedPersonInfo | null {
     try {

@@ -117,6 +117,13 @@ export function SettingsScreen(props: Props): React.JSX.Element {
           variant="neutral"
           style={styles.spaced}
         />
+        <Text style={styles.label}>{t('systemCallUi')}</Text>
+        <BigButton
+          label={settings.systemCallUi ? t('on') : t('off')}
+          onPress={() => onChange({...settings, systemCallUi: !settings.systemCallUi})}
+          variant={settings.systemCallUi ? 'primary' : 'neutral'}
+          testID="toggle-system-call-ui"
+        />
         <BigButton label={t('devPanel')} onPress={props.onOpenDev} variant="neutral" style={styles.spaced} />
       </ScrollView>
       <View style={styles.footer}>

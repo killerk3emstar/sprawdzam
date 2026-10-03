@@ -84,6 +84,13 @@ export class CallEngineCore implements ControlListener, CallListener {
     session.sendDtmf(digits);
   }
 
+  setMuted(callId: string, muted: boolean): void {
+    const session = this.call;
+    if (session !== null && session.callId === callId) {
+      session.setMuted(muted);
+    }
+  }
+
   destroy(): void {
     this.control.disconnect();
     this.hangup();

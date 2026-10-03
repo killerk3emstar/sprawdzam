@@ -11,6 +11,7 @@ import { CallEngineCore, CallEngineListener } from './CallEngineCore';
 import { CallNotifier } from './CallNotifier';
 import { ContactsBridge } from './ContactsBridge';
 import { SettingsStore } from './SettingsStore';
+import { SystemCallUi, SystemCallUiListener } from './SystemCallUi';
 import {
   CallActiveEvent,
   CallEndedEvent,
@@ -29,13 +30,15 @@ import {
   VerifyPasswordEvent
 } from './Protocol';
 
-export class CallEngineTurboModule extends UITurboModule implements TM.CallEngine.Spec, CallEngineListener {
+export class CallEngineTurboModule extends UITurboModule
+  implements TM.CallEngine.Spec, CallEngineListener, SystemCallUiListener {
   public static readonly NAME: string = TM.CallEngine.NAME;
 
   private core: CallEngineCore = new CallEngineCore(this);
   private notifierValue: CallNotifier | null = null;
   private settingsValue: SettingsStore | null = null;
   private contactsValue: ContactsBridge | null = null;
+  private systemUi: SystemCallUi = new SystemCallUi(this);
 
   private get contacts(): ContactsBridge {
     if (this.contactsValue === null) {
@@ -152,11 +155,32 @@ export class CallEngineTurboModule extends UITurboModule implements TM.CallEngin
 
   onIncomingCall(event: IncomingCallEvent): void {
     this.notifier.incomingCall(event.caller);
+    if (this.settings.getBool('systemCallUi')) {
+      const label = this.settings.getString('lang', 'pl') === 'en' ? 'Protected call' : 'Rozmowa chroniona';
+      this.systemUi.reportIncoming(event.callId, event.caller, label);
+    }
     this.ctx.rnInstance.emitDeviceEvent(EVENT_INCOMING_CALL, event);
   }
 
   onCallActive(event: CallActiveEvent): void {
+    this.systemUi.reportActive(event.callId);
     this.ctx.rnInstance.emitDeviceEvent(EVENT_CALL_ACTIVE, event);
+  }
+
+  // --- System call UI (Call Service Kit) -> engine ---
+
+  onSystemAnswer(callId: string): void {
+    this.acceptCall(callId).catch((e: Error) => {
+      this.onError({ code: 'system_answer_failed', message: e.message });
+    });
+  }
+
+  onSystemHangup(callId: string): void {
+    this.core.hangup();
+  }
+
+  onSystemMute(callId: string, muted: boolean): void {
+    this.core.setMuted(callId, muted);
   }
 
   onProtectionStatus(event: ProtectionStatusEvent): void {
@@ -173,6 +197,7 @@ export class CallEngineTurboModule extends UITurboModule implements TM.CallEngin
   }
 
   onCallEnded(event: CallEndedEvent): void {
+    this.systemUi.reportEnded(event.callId);
     this.notifier.callEnded(event.reason);
     this.ctx.rnInstance.emitDeviceEvent(EVENT_CALL_ENDED, event);
   }

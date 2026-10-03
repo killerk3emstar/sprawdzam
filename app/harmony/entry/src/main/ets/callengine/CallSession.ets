@@ -159,6 +159,10 @@ export class CallSession {
     }
   }
 
+  setMuted(muted: boolean): void {
+    this.voice.setMuted(muted);
+  }
+
   /** Ends the call locally without telling the backend (e.g. the channel never opened). */
   abort(reason: string): void {
     this.finish(reason, true);
