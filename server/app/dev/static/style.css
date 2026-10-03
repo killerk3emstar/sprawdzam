@@ -14,6 +14,12 @@ h1 small, .hint { color: var(--muted); font-weight: normal; font-size: .85rem; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
         padding: 14px; margin: 12px 0; }
 label { display: block; margin: 8px 0; color: var(--muted); font-size: .9rem; }
+label.check { display: flex; gap: 8px; align-items: center; }
+label.check input { width: auto; margin: 0; }
+summary { cursor: pointer; color: var(--muted); }
+textarea { display: block; width: 100%; margin-top: 4px; padding: 8px; font: inherit;
+           color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+           border-radius: 6px; }
 input, select { display: block; width: 100%; margin-top: 4px; padding: 8px; font: inherit;
                 color: var(--fg); background: var(--bg); border: 1px solid var(--line);
                 border-radius: 6px; }

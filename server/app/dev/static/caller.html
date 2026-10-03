@@ -10,12 +10,16 @@
 <main>
   <h1>Dev caller <small>plays the caller over the real media-stream path (Twilio format)</small></h1>
   <p class="hint">Open <a href="/dev/senior" target="_blank">/dev/senior</a> first and turn
-    protection on. Use headphones: two tabs on one computer will otherwise feed back.</p>
+    protection on. With the microphone, use headphones: two tabs on one computer feed back.</p>
   <div class="card">
     <label>Caller number <input id="caller" value="+48500000001" autocomplete="off"></label>
     <label>Language
-      <select id="lang"><option value="">server default</option><option>pl</option><option>en</option></select>
+      <select id="lang"><option value="">server default / app setting</option><option>pl</option><option>en</option></select>
     </label>
+    <label>Audio source
+      <select id="source"><option value="">microphone</option></select>
+    </label>
+    <label class="check"><input id="mute" type="checkbox"> mute playback in this tab</label>
     <div class="row">
       <button id="call" class="primary">Call</button>
       <button id="hangup" class="danger" disabled>Hang up</button>
@@ -33,7 +37,9 @@ import { base64ToBytes, bytesToBase64, makeLogger, mulawDecode, mulawEncode, sta
 const $ = (id) => document.getElementById(id);
 const log = makeLogger($("log"));
 const ACCOUNT = "AC" + "0".repeat(32);
+const SILENCE = new Uint8Array(160).fill(0xff);
 let ws = null, audio = null, streamSid = null, callId = null, seq = 0, chunk = 0, t0 = 0;
+let sample = null, samplePos = 0, sampleTimer = null, answered = false;
 
 const hex = (n) => [...crypto.getRandomValues(new Uint8Array(n))]
   .map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -44,39 +50,93 @@ const send = (obj) => {
   }
 };
 
-function sendFrame(samples) {
+function sendMulaw(bytes) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   chunk += 1;
   send({ event: "media", streamSid, media: {
     track: "inbound", chunk: String(chunk), timestamp: String(Math.round(performance.now() - t0)),
-    payload: bytesToBase64(mulawEncode(samples)) } });
+    payload: bytesToBase64(bytes) } });
+}
+
+// Microphone mode: 20 ms frames from the AudioWorklet.
+const sendFrame = (samples) => sendMulaw(mulawEncode(samples));
+
+// Sample mode: silence until the senior answers (first `clear`), then the clip in real
+// time, then silence again so the call stays open until someone hangs up.
+function nextSampleFrame() {
+  if (!answered || !sample || samplePos >= sample.length) return SILENCE;
+  const frame = new Uint8Array(160).fill(0xff);
+  frame.set(sample.subarray(samplePos, samplePos + 160));
+  samplePos += 160;
+  if (samplePos >= sample.length) log("sample finished (silence from now on)");
+  return frame;
+}
+
+function startSampleClock() {
+  const start = performance.now();
+  let sent = 0;
+  sampleTimer = setInterval(() => {
+    const due = Math.floor((performance.now() - start) / 20);
+    while (sent < due) { sendMulaw(nextSampleFrame()); sent += 1; }
+  }, 20);
 }
 
 function onServerMessage(msg) {
   if (msg.event === "media") {
-    if (audio) audio.play(mulawDecode(base64ToBytes(msg.media.payload)));
+    if (audio && !$("mute").checked) audio.play(mulawDecode(base64ToBytes(msg.media.payload)));
   } else if (msg.event === "clear") {
     if (audio) audio.clear();
-    log("clear: answered, ringback stopped");
+    if (!answered) {
+      answered = true;
+      log(sample ? "answered: ringback stopped, playing the sample" : "answered: ringback stopped");
+    } else {
+      log("clear (a backend prompt starts)");
+    }
   } else if (msg.event === "mark") {
     send({ event: "mark", streamSid, mark: { name: msg.mark.name } });
   }
 }
 
 async function cleanup() {
+  clearInterval(sampleTimer);
+  sampleTimer = null;
   if (audio) { const a = audio; audio = null; await a.stop(); }
   ws = null;
   $("call").disabled = false;
   $("hangup").disabled = true;
 }
 
+async function loadSamples() {
+  try {
+    const res = await fetch("/dev/samples");
+    const { samples } = await res.json();
+    for (const s of samples) {
+      const option = document.createElement("option");
+      option.value = s.name;
+      option.textContent = `sample: ${s.name} (${s.seconds} s)`;
+      $("source").append(option);
+    }
+    if (!samples.length) log("no samples yet: run server/scripts/make_samples.sh");
+  } catch (err) {
+    log(`could not list samples: ${err.message}`);
+  }
+}
+
 $("call").onclick = async () => {
   $("call").disabled = true;
   try {
+    const source = $("source").value;
+    sample = null; samplePos = 0; answered = false;
+    if (source) {
+      const res = await fetch(`/dev/samples/${encodeURIComponent(source)}.ulaw`);
+      if (!res.ok) throw new Error(`sample ${source}: HTTP ${res.status}`);
+      sample = new Uint8Array(await res.arrayBuffer());
+    }
+    const lang = $("lang").value || (source ? source.slice(0, 2) : null);
     const res = await fetch("/dev/calls", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caller: $("caller").value.trim(), lang: $("lang").value || null }),
+      body: JSON.stringify({ caller: $("caller").value.trim(), lang }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -87,8 +147,9 @@ $("call").onclick = async () => {
     callId = data.callId;
     streamSid = "MZ" + hex(16);
     seq = 0; chunk = 0;
-    log(`call ${callId} admitted; a real caller now hears: "${data.notice}"`);
-    audio = await startAudio({ targetRate: 8000, frameSamples: 160, onFrame: sendFrame });
+    log(data.trusted ? `call ${callId} admitted (whitelisted contact: no notice, no analysis)`
+                     : `call ${callId} admitted; a real caller now hears: "${data.notice}"`);
+    audio = await startAudio({ targetRate: 8000, frameSamples: 160, onFrame: sendFrame, mic: !sample });
     ws = new WebSocket(wsBase() + data.streamPath);
     ws.onopen = () => {
       send({ event: "connected", protocol: "Call", version: "1.0.0" });
@@ -97,7 +158,8 @@ $("call").onclick = async () => {
         customParameters: { token: data.token, lang: data.lang, callId },
         mediaFormat: { encoding: "audio/x-mulaw", sampleRate: 8000, channels: 1 } } });
       t0 = performance.now();
-      setStatus("ringing (waiting for the senior to accept)");
+      if (sample) startSampleClock();
+      setStatus(`ringing (${data.lang}, waiting for the senior to accept)`);
       $("hangup").disabled = false;
     };
     ws.onmessage = (event) => onServerMessage(JSON.parse(event.data));
@@ -119,6 +181,8 @@ for (const digit of "123456789*0#") {
   button.onclick = () => send({ event: "dtmf", streamSid, dtmf: { track: "inbound_track", digit } });
   $("keypad").append(button);
 }
+
+loadSamples();
 </script>
 </body>
 </html>

@@ -64,22 +64,27 @@ export function wsBase() {
 
 // Microphone frames at `targetRate` go to onFrame(Float32Array); play() takes samples at
 // `targetRate`. Needs a secure context (https or http://localhost) for the microphone.
-export async function startAudio({ targetRate, frameSamples, onFrame }) {
-  if (!navigator.mediaDevices) throw new Error("microphone needs https or http://localhost");
+// With mic: false only playback is set up (no microphone permission needed).
+export async function startAudio({ targetRate, frameSamples, onFrame, mic = true }) {
+  if (mic && !navigator.mediaDevices) throw new Error("microphone needs https or http://localhost");
   const ctx = new AudioContext();
   await ctx.audioWorklet.addModule("/dev/static/pcm-worklet.js");
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-  });
-  const source = ctx.createMediaStreamSource(stream);
+  let stream = null;
+  let source = null;
   const node = new AudioWorkletNode(ctx, "pcm-bridge", {
     numberOfInputs: 1,
     numberOfOutputs: 1,
     outputChannelCount: [1],
     processorOptions: { targetRate, frameSamples },
   });
-  node.port.onmessage = (event) => onFrame(event.data);
-  source.connect(node);
+  if (mic) {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    source = ctx.createMediaStreamSource(stream);
+    source.connect(node);
+    node.port.onmessage = (event) => onFrame(event.data);
+  }
   node.connect(ctx.destination);
   await ctx.resume();
   return {
@@ -90,8 +95,8 @@ export async function startAudio({ targetRate, frameSamples, onFrame }) {
       node.port.postMessage({ type: "clear" });
     },
     async stop() {
-      stream.getTracks().forEach((t) => t.stop());
-      source.disconnect();
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (source) source.disconnect();
       node.disconnect();
       await ctx.close();
     },

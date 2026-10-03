@@ -56,3 +56,34 @@ def test_dev_call_validation_and_rate_limit(make_client, make_settings):
     assert client.post("/dev/calls", json={"lang": "de"}).status_code == 422
     assert client.post("/dev/calls", json={}).status_code == 200
     assert client.post("/dev/calls", json={}).status_code == 429
+
+
+def test_samples_are_listed_and_served(make_client, make_settings, tmp_path):
+    samples = tmp_path / "data" / "samples"
+    samples.mkdir(parents=True)
+    (samples / "pl_scam_police.ulaw").write_bytes(b"\xff" * 16000)
+    (samples / "en_normal_family.ulaw").write_bytes(b"\x7f" * 8000)
+    (samples / "Bad Name.ulaw").write_bytes(b"\xff" * 10)
+    (samples / "pl_empty.ulaw").write_bytes(b"")
+    client = make_client(make_settings(DEV_TOOLS=True))
+    listing = client.get("/dev/samples").json()["samples"]
+    assert listing == [
+        {"name": "en_normal_family", "lang": "en", "seconds": 1.0},
+        {"name": "pl_scam_police", "lang": "pl", "seconds": 2.0},
+    ]
+    response = client.get("/dev/samples/pl_scam_police.ulaw")
+    assert response.status_code == 200 and response.content == b"\xff" * 16000
+    assert response.headers["content-type"] == "audio/basic"
+    for bad in ["../secrets", "pl_missing", "Bad%20Name", "xx_scam"]:
+        assert client.get(f"/dev/samples/{bad}.ulaw").status_code == 404
+
+
+def test_samples_listing_without_directory(make_client, make_settings):
+    client = make_client(make_settings(DEV_TOOLS=True))
+    assert client.get("/dev/samples").json() == {"samples": []}
+
+
+def test_sample_routes_absent_by_default(make_client):
+    client = make_client()
+    assert client.get("/dev/samples").status_code == 404
+    assert client.get("/dev/samples/pl_scam_police.ulaw").status_code == 404

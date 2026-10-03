@@ -18,6 +18,16 @@
     </div>
     <p>Protection: <span id="prot" class="status off">off</span></p>
   </div>
+  <details class="card" id="settingsbox">
+    <summary>Settings (sent to the backend on connect)</summary>
+    <label>Language
+      <select id="setLang"><option>pl</option><option>en</option></select></label>
+    <label>Trusted person name <input id="setName" autocomplete="off"></label>
+    <label>Trusted person number (E.164) <input id="setNumber" placeholder="+48600000001" autocomplete="off"></label>
+    <label>Whitelist (contacts, one E.164 number per line)
+      <textarea id="setWhitelist" rows="3" placeholder="+48500000002"></textarea></label>
+    <button id="sendSettings">Send settings</button>
+  </details>
   <div class="card" id="callbox" hidden>
     <h2 style="margin:0">Call from <span id="callerNo"></span></h2>
     <p>State: <span id="callState" class="status"></span></p>
@@ -59,8 +69,12 @@ function openControl() {
     const msg = JSON.parse(event.data);
     if (msg.type === "protection_status") {
       msg.available ? setProt("on", "on") : setProt("unavailable", "off");
+      if (msg.available) sendSettings();
     } else if (msg.type === "incoming_call") {
       onIncoming(msg);
+    } else if (msg.type === "settings_ack") {
+      log(msg.accepted ? `settings accepted (whitelist ${msg.whitelist}, ignored ${msg.ignored})`
+                       : `settings rejected: ${msg.error}`);
     }
   };
   control.onclose = (event) => {
@@ -71,6 +85,35 @@ function openControl() {
     if (wantOn) reconnectTimer = setTimeout(openControl, 3000);
   };
 }
+
+function readSettings() {
+  const number = $("setNumber").value.trim();
+  const whitelist = $("setWhitelist").value.split(/[\s,;]+/).map((n) => n.trim()).filter(Boolean);
+  return {
+    type: "settings",
+    lang: $("setLang").value,
+    trustedPerson: number ? { name: $("setName").value.trim(), number } : null,
+    whitelist,
+  };
+}
+
+function sendSettings() {
+  const settings = readSettings();
+  try { localStorage.setItem("devSettings", JSON.stringify(settings)); } catch {}
+  if (control && control.readyState === WebSocket.OPEN) control.send(JSON.stringify(settings));
+}
+
+try {
+  const saved = JSON.parse(localStorage.getItem("devSettings") || "null");
+  if (saved) {
+    $("setLang").value = saved.lang || "pl";
+    $("setName").value = (saved.trustedPerson && saved.trustedPerson.name) || "";
+    $("setNumber").value = (saved.trustedPerson && saved.trustedPerson.number) || "";
+    $("setWhitelist").value = (saved.whitelist || []).join("\n");
+  }
+} catch {}
+
+$("sendSettings").onclick = sendSettings;
 
 function syncButtons() { $("on").disabled = wantOn; $("off").disabled = !wantOn; }
 
@@ -90,7 +133,7 @@ $("off").onclick = () => {
 function onIncoming(msg) {
   if (call) { log("another incoming call while busy: ignored"); return; }
   $("callbox").hidden = false;
-  $("callerNo").textContent = `${msg.caller} (${msg.lang})`;
+  $("callerNo").textContent = `${msg.caller} (${msg.lang})${msg.trusted ? " · contact, not analysed" : ""}`;
   $("accept").disabled = false;
   $("hangup").disabled = false;
   $("verify").hidden = true;

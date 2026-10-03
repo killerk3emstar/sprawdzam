@@ -47,25 +47,47 @@ every call hears "protection temporarily unavailable".
 
 ```bash
 cd server
+scripts/make_prompts.sh && scripts/make_samples.sh     # once: voice prompts + sample clips
 DEV_TOOLS=true APP_DEVICE_TOKEN=dev-token-change-me-123 scripts/run_dev.sh
 ```
 
 1. Open <http://localhost:8765/dev/senior>, paste `dev-token-change-me-123` as the device
    token and click **Turn protection on**. "Protection: on" means the control channel is open.
-2. Open <http://localhost:8765/dev/caller> in a second tab and click **Call**. The browser asks
-   for the microphone. The senior tab shows the incoming call (masked number) and the caller
-   tab hears the 425 Hz ringback tone.
-3. Click **Accept** in the senior tab (it asks for the microphone too). The ringback stops.
-4. Speak into the microphone: the caller tab's voice comes out of the senior tab and the
-   other way round. Use headphones, otherwise two tabs on one computer feed back.
+   The optional **Settings** box sends `settings` (language, trusted person, whitelist).
+2. Open <http://localhost:8765/dev/caller> in a second tab. Pick an **Audio source**: the
+   microphone or a sample clip (`pl_scam_police`, `pl_scam_bank`, `pl_normal_family`,
+   `en_scam_bank`, `en_normal_family`; the call language follows the clip). Tick **mute
+   playback** if both tabs share speakers. Click **Call**. The senior tab shows the incoming
+   call (masked number) and the caller tab hears the 425 Hz ringback tone.
+3. Click **Accept** in the senior tab (it asks for the microphone). The ringback stops and a
+   sample clip starts playing in real time through the same `/twilio/stream` path.
+4. With the models running, watch the risk bar rise; a scam ends with the password prompt and
+   `call_ended: scam_blocked`. A normal clip stays below the warning level.
 5. Click **Hang up** in either tab; the other side shows the call as ended.
 
-Without `WHISPER_URL` there is no transcript, so the risk bar stays at 0; with the models
-running (see below) speak a scam script and watch the risk rise. The browser needs a secure
-context for the microphone: `http://localhost` works, a LAN IP needs HTTPS (e.g. a tunnel).
-Not accepting within 30 s ends the call (`timeout`). The caller keypad sends DTMF, which is
-used for the family-password check (`FAMILY_PASSWORD`). `/dev/caller` speaks the Twilio media
-stream format over the same WebSocket the real provider uses.
+Without `WHISPER_URL` there is no transcript, so the risk bar stays at 0. The browser needs a
+secure context for the microphone: `http://localhost` works, a LAN IP needs HTTPS (e.g. a
+tunnel). Sample mode needs no microphone. Not accepting within 30 s ends the call
+(`timeout`). The caller keypad sends DTMF (the family password). `/dev/caller` speaks the
+Twilio media stream format over the same WebSocket the real provider uses.
+
+## Dev backend for the end-to-end test with the HarmonyOS app
+
+Dev values live in the untracked `server/.env.dev` (ignored by `.env.*`): `DEV_TOOLS=true`,
+`APP_DEVICE_TOKEN=dev-device-1-sprawdzam`, `FAMILY_PASSWORD=1234` (**demo value only**),
+`TELEPHONY_DRY_RUN=true`, models on `127.0.0.1:8080` / `:8000`.
+
+```bash
+cd server
+nohup scripts/run_dev.sh --env .env.dev > ~/models/sprawdzam/logs/backend.log 2>&1 &
+# restart: pkill -f "uvicorn app.main:app --host 127.0.0.1 --port 8765", then the line above
+```
+
+- Caller: <http://localhost:8765/dev/caller> · stand-in app: <http://localhost:8765/dev/senior>
+  · status: <http://localhost:8765/health>
+- The emulator reaches the Mac with `hdc rport tcp:8765 tcp:8765`; the app connects to
+  `ws://localhost:8765/app/control?device_token=dev-device-1-sprawdzam`.
+- Log: `~/models/sprawdzam/logs/backend.log` (no transcripts, numbers masked).
 
 ## Endpoints
 
@@ -142,9 +164,9 @@ becomes the alert target only if it is on `OUTBOUND_ALLOWLIST`, otherwise
 `TRUSTED_PERSON_NUMBER` is used. Settings live in RAM only and are logged as counts.
 
 Connecting the HarmonyOS app (emulator) in development: run the backend on 8765, forward the
-port with `hdc rport tcp:8765 tcp:8765`, and use the same device token in the app and in
-`../.env` (`APP_DEVICE_TOKEN`, at least 16 characters, e.g. `dev-device-1-sprawdzam`; the
-shorter `dev-device-1` is rejected with 1008). The app derives the call URL from the control
+port with `hdc rport tcp:8765 tcp:8765`, and use the same device token in the app and in the
+backend (`APP_DEVICE_TOKEN`, at least 16 characters; the dev backend above uses
+`dev-device-1-sprawdzam`, the shorter `dev-device-1` is rejected with 1008). The app derives the call URL from the control
 URL (`/app/control` → `/app/call/{callId}?token=…`), as in the protocol.
 
 See [`docs/APP_PROTOCOL.md`](../docs/APP_PROTOCOL.md). In short: the app keeps
