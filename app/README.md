@@ -194,6 +194,7 @@ Verified on the emulator (2026-10-03, native path): accept + correct password (c
 - `--ps spike audio [--ps source mic|voice|recognition|unprocessed] [--ps rate 16000|48000] [--ps secs 10] [--ps play 0|1]`: capture test with RMS per 100 ms and throughput logs (`hdc hilog | grep SprawdzamAudio`). Silent unless `play 1`.
 - `--ps spike beep`: **audible** siren via MUSIC and VOICE_COMMUNICATION. Agree on audible tests with the team before running them on a shared emulator.
 - `--ps spike call [--ps mode accept|reject|ignore]`: native call self-test (see above).
+- `--ps spike voip --ps mode check|report [--ps secs 10]`: Call Service Kit spike. `check` is silent (logs `canIUse('SystemCapability.Telephony.VoipCallManager')`); `report` calls `voipCall.reportIncomingCall` and **may ring** through the system incoming-call UI (agree with the team first). Logs: `hdc hilog | grep VoipSpike`.
 
 ## Checks
 

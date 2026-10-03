@@ -10,12 +10,14 @@ import { AbilityConstant, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AudioSpikeOptions, audioSpikeOptionsFromWant, runAudioSpike } from '../callengine/AudioSpike';
 import { CallSpikeOptions, callSpikeOptionsFromWant, runCallSpike } from '../callengine/CallSpike';
+import { runVoipSpike, voipSpikeOptionsFromWant } from '../callengine/VoipSpike';
 
 // Debug-only launch hooks (see callengine/AudioSpike.ets and callengine/CallSpike.ets):
-//   aa start ... --ps spike audio|beep|call
+//   aa start ... --ps spike audio|beep|call|voip
 export default class EntryAbility extends RNAbility {
   private pendingAudioSpike: AudioSpikeOptions | null = null;
   private pendingCallSpike: CallSpikeOptions | null = null;
+  private spikeLaunchWant: Want = {};
 
   override getPagePath() {
     return 'pages/Index';
@@ -29,6 +31,7 @@ export default class EntryAbility extends RNAbility {
     super.onCreate(want, launchParam);
     this.pendingAudioSpike = audioSpikeOptionsFromWant(want);
     this.pendingCallSpike = callSpikeOptionsFromWant(want);
+    this.spikeLaunchWant = want;
   }
 
   override onWindowStageCreate(windowStage: window.WindowStage) {
@@ -38,6 +41,12 @@ export default class EntryAbility extends RNAbility {
     if (opts !== null) {
       setTimeout(() => {
         runAudioSpike(this.context, opts);
+      }, 1500);
+    }
+    const voipOpts = voipSpikeOptionsFromWant(this.spikeLaunchWant);
+    if (voipOpts !== null) {
+      setTimeout(() => {
+        runVoipSpike(voipOpts);
       }, 1500);
     }
     const callOpts = this.pendingCallSpike;
@@ -58,6 +67,10 @@ export default class EntryAbility extends RNAbility {
     const callOpts = callSpikeOptionsFromWant(want);
     if (callOpts !== null) {
       runCallSpike(callOpts);
+    }
+    const voipOpts = voipSpikeOptionsFromWant(want);
+    if (voipOpts !== null) {
+      runVoipSpike(voipOpts);
     }
   }
 }
