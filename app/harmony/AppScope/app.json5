@@ -1,7 +1,7 @@
 {
   "app": {
     "bundleName": "pl.sprawdzam.app",
-    "vendor": "example",
+    "vendor": "sprawdzam",
     "versionCode": 1000000,
     "versionName": "1.0.0",
     "icon": "$media:app_icon",
