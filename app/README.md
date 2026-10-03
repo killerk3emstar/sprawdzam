@@ -5,7 +5,7 @@ One React Native code base for two targets:
 - **HarmonyOS** through React Native for OpenHarmony (RNOH), packaged as a `.hap` (Huawei challenge target)
 - **Android**
 
-Senior UI (home status, full-screen incoming call, in-call risk banner and family-password keypad, call result, settings) in PL/EN, plus a hidden developer panel (long-press the app name for 2 s). Native modules on HarmonyOS: CallEngine (audio + WebSockets), Notification Kit, Contacts Kit picker, Preferences + Asset Store Kit, optional Call Service Kit.
+The app is the senior's side of Sprawdzam: it keeps a control connection to the backend, shows protected calls full-screen, carries the call audio natively and shows the backend's live scam-risk assessment. See [Screens](#screens), [Platform capabilities](#platform-capabilities) and [CallEngine](#callengine-native-call-audio).
 
 ## Versions
 
@@ -128,6 +128,37 @@ npm run android                  # build, install and launch on a running emulat
 
 No keystore is committed. Debug builds use the Android Gradle Plugin default `~/.android/debug.keystore`.
 
+## Screens
+
+Minimal, large, high-contrast UI for seniors (team decision): body text ≥ 24 pt, touch targets ≥ 72 dp, WCAG AA contrast (ratios in `src/theme.ts`), few words, all strings in PL and EN in `src/i18n.tsx`. Pure React Native components.
+
+| Screen | File | What it shows |
+| --- | --- | --- |
+| Home | `src/screens/HomeScreen.tsx` | One big status: green "Jesteś chroniony / You are protected" or amber "Ochrona chwilowo niedostępna / Protection temporarily unavailable" (control channel down, fail-open). One button to Settings. Long-press the app name for 2 s: developer panel. |
+| Incoming call | `src/screens/IncomingCallScreen.tsx` | Full screen, masked caller on one line, big Answer (green) and Decline (red). |
+| In call | `src/screens/InCallScreen.tsx` | Caller, timer, risk banner (neutral, amber at `warn`, red at `high` with the reasons), on `verify_password` our own big numeric keypad for the family password (compact layout, no system keyboard), big Hang up. |
+| Call result | `src/screens/CallEndedScreen.tsx` | Per `call_ended` reason, e.g. red "Rozłączyliśmy podejrzaną rozmowę. Powiadomiliśmy osobę zaufaną." for `scam_blocked`; OK returns home. |
+| Settings | `src/screens/SettingsScreen.tsx` | Language PL/EN (UI and the language sent to the backend), trusted person and whitelist from contacts, notifications, developer fields (backend URL, device token, system call screen toggle, test panel). |
+
+Call state lives in `src/useCallEngine.ts`; `App.tsx` lets an incoming or active call take over the screen.
+
+## Platform capabilities
+
+What each platform feature is used for and where it was verified. "Emulator" means the DevEco Studio phone emulator (HarmonyOS 6.1.0.126, API 24) on 2026-10-03.
+
+| Capability | HarmonyOS (ArkTS) | Verified on HarmonyOS | Android (Kotlin) | Verified on Android |
+| --- | --- | --- | --- | --- |
+| Call audio | Audio Kit: `AudioCapturer` (MIC on the emulator, VOICE_COMMUNICATION on phones) + `AudioRenderer` (VOICE_COMMUNICATION), 16 kHz mono PCM16, 20 ms frames | Emulator: continuous capture at 16/48 kHz, playback audible (human), 20 ms frames both ways with the fake backend | `AudioRecord` VOICE_COMMUNICATION + `AudioTrack` USAGE_VOICE_COMMUNICATION | Build only |
+| Backend connection | Network Kit `webSocket` (control + call channels) | Emulator, fake backend: all protocol paths incl. 1008, 4000, timeout, scam_blocked | OkHttp WebSocket | Build only |
+| Notifications | Notification Kit (`notificationManager`, `wantAgent` to open the app), permission via `requestEnableNotification` | Emulator: incoming-call notification seen by a person; warn/high/blocked published (hilog) | `NotificationManager`, channel `calls`, POST_NOTIFICATIONS on API 33+ | Build only |
+| Contacts | Contacts Kit picker `contact.selectContacts` (no permission; READ_CONTACTS is ACL-restricted) | Emulator: picker opens with "limited access"; picking not tested (no contacts on the emulator) | `ACTION_PICK` on phone numbers (no READ_CONTACTS) | Build only |
+| Secure storage | Asset Store Kit for the device token, Preferences for settings and whitelist | Emulator: token stored in Asset Store (hilog) | SharedPreferences (Keystore: TODO) | Build only |
+| Microphone permission | `abilityAccessCtrl.requestPermissionsFromUser`, reason string in PL/EN | Emulator (a person tapped Allow) | RECORD_AUDIO runtime request on answer | Build only |
+| System call UI | Call Service Kit `voipCall.reportIncomingCall` behind Settings > Developer toggle (default off); UI events map to accept/hangup/mute | Not available on the emulator (`canIUse('SystemCapability.Telephony.VoipCallManager') = false`); needs a physical Huawei phone | — | — |
+| Call filtering | Not available to apps (rejecting calls is a system API): operator unconditional forwarding + whitelist in the backend | — | `CallScreeningService` stub (allows all calls); planned: reject non-contacts so "forward when busy" sends them to the backend | Build only |
+
+Not done yet: keeping protection running while the app is closed (HarmonyOS suspends background apps; needs Push Kit VoIP push or a continuous task), home-screen widget, Android Keystore for the token.
+
 ## CallEngine (native call audio)
 
 The CallEngine TurboModule connects the app to the backend and carries call audio. Audio stays native:
@@ -137,14 +168,22 @@ JS sends commands and receives control events only, so 50 audio frames per secon
 | --- | --- |
 | TS spec (codegen input) | `src/native/NativeCallEngine.ts` |
 | JS facade with typed events | `src/native/CallEngine.ts` |
-| Dev panel (connect, incoming call, accept, risk, password, hang up) | `src/DevCallPanel.tsx` |
-| HarmonyOS implementation (ArkTS) | `harmony/entry/src/main/ets/callengine/` |
-| Android stub (Kotlin, rejects with `E_NOT_IMPLEMENTED`) | `android/app/src/main/java/pl/sprawdzam/app/callengine/` |
+| HarmonyOS implementation (ArkTS) | `harmony/entry/src/main/ets/callengine/`: `CallEngineTurboModule` (UITurboModule) on `CallEngineCore`, `ControlChannel`, `CallSession`, `VoiceAudio`, `CallNotifier`, `ContactsBridge`, `SettingsStore`, `SystemCallUi`, `Protocol` |
+| Android implementation (Kotlin) | `android/app/src/main/java/pl/sprawdzam/app/callengine/`: `CallEngineModule` (TurboModule), `ControlChannel`, `CallSession`, `VoiceAudio`, `CallNotifier`, `SettingsStore`, `ScreeningService` (stub), `Protocol` |
+| Developer panel | `src/DevCallPanel.tsx` |
 | Fake backend for local tests (silent) | `tools/fake_backend.py` |
+
+```
+JS (senior UI)  ── commands ──►  CallEngine TurboModule  ── control WS ──►  backend /app/control
+      ▲                              │   └── call WS (PCM 20 ms frames both ways) ──► /app/call/{id}
+      └──── events (DeviceEventEmitter) ┘   mic ⇄ VoiceAudio ⇄ speaker (native only)
+```
+
+Both platforms implement the same spec, protocol and events; the HarmonyOS side has been run on the emulator, the Android side is build-verified only.
 
 Codegen: `package.json` → `harmony.codegenConfig` (RNOH `codegen-harmony` v1, run by the hvigor plugin on every build; output in git-ignored `cpp/generated/` and `oh_modules/.../generated/`) and `codegenConfig` (React Native Android codegen, generates `NativeCallEngineSpec`).
 
-API: `connectControl(url, deviceToken)`, `disconnectControl()`, `requestMicrophonePermission()`, `acceptCall(callId)`, `hangup()` (also rejects a ringing call), `sendDtmf(digits)`. Events (via `DeviceEventEmitter`, names `CallEngine.on*`): `incomingCall` `{callId, caller, lang}`, `callActive`, `risk`, `verifyPassword`, `callEnded` `{callId, reason}`, `protectionStatus` `{available, connected}`, `error`. The one-time call token stays in native code.
+API: `connectControl(url, deviceToken)`, `disconnectControl()`, `requestMicrophonePermission()`, `acceptCall(callId)`, `hangup()` (also rejects a ringing call), `sendDtmf(digits)`, `requestNotificationPermission()`, `loadSettings()`, `saveSettings(json)`, `pickTrustedPerson()`, `pickWhitelistContacts()`, `getWhitelistCount()`. Events (via `DeviceEventEmitter`, names `CallEngine.on*`): `incomingCall` `{callId, caller, lang}`, `callActive`, `risk`, `verifyPassword`, `callEnded` `{callId, reason}`, `protectionStatus` `{available, connected}`, `error`. The one-time call token stays in native code.
 
 ### Protocol v0
 
@@ -158,12 +197,10 @@ The source of truth is `docs/APP_PROTOCOL.md` in the server repository (branch `
 - `call_ended` reasons: `caller_hangup`, `senior_hangup`, `scam_blocked`, `timeout`, `error`. A call channel that closes without `call_ended` ends with `error` (1008 also emits `error` `call_auth_failed`).
 - Unknown message types and fields are ignored. `ws://` only on the localhost dev path; production uses `wss://`.
 
-### Contacts, settings and notifications (HarmonyOS)
+### Contacts, settings and the `settings` message
 
-- Trusted person and whitelist come from the system contact picker (`contact.selectContacts`, Contacts Kit). No contacts permission is needed (`READ_CONTACTS` is ACL-restricted on HarmonyOS). Whitelist numbers stay native and are sent only over the control channel in the `settings` message (see `../docs/APP_PROTOCOL_EXTENSIONS.md`); the app logs counts only.
-- Settings are stored in Preferences; the device token in Asset Store Kit.
-- Notification Kit: incoming protected call, warn/high risk, blocked scam (permission requested on first start). The incoming-call notification was confirmed on the emulator by a person; the others were checked in hilog.
-- Call Service Kit (system call UI): wired behind Settings > Developer > "System call screen (test)", default off. On the DevEco emulator `canIUse('SystemCapability.Telephony.VoipCallManager')` is `false`, so only a physical Huawei phone can show it; the app's own full-screen call screen is the default and the fallback.
+- Trusted person and whitelist come from the system contact picker (HarmonyOS: single and multi-select; Android: one contact per pick). No contacts permission on either platform.
+- Whitelist numbers stay native and are sent only over the control channel in `{"type":"settings","lang","trustedPerson","whitelist"}` after every (re)connect and settings change (proposed protocol extension: `../docs/APP_PROTOCOL_EXTENSIONS.md`). The app logs counts only. Verified on the emulator with the fake backend: the message arrives on connect and after switching the language.
 - Background: notifications and the control channel need the app process to be alive. HarmonyOS suspends background apps; keeping protection running while the app is closed needs a VoIP push (Push Kit `VoIPExtensionAbility`, AppGallery account) or a continuous task. Not done yet; for the demo the app stays in the foreground.
 
 ### Audio on the DevEco emulator
@@ -211,8 +248,12 @@ npm run lint      # ESLint
 
 ```
 app/
-  App.tsx, index.js        shared React Native code (TypeScript)
-  src/native/              TurboModule specs and JS facades (CallEngine)
+  App.tsx, index.js        shared React Native code (TypeScript), screen routing
+  src/screens/             senior UI screens; src/components/ (BigButton, Keypad, RiskBanner)
+  src/i18n.tsx, theme.ts   PL/EN strings, design tokens
+  src/settings.ts          settings model (persisted natively)
+  src/useCallEngine.ts     call state from CallEngine events
+  src/native/              TurboModule spec and JS facade (CallEngine)
   src/DevCallPanel.tsx     CallEngine developer panel
   tools/fake_backend.py    silent protocol v0 backend for local tests
   metro.config.js          adds the "harmony" platform (createHarmonyMetroConfig)
@@ -220,5 +261,5 @@ app/
     AppScope/app.json5     bundle name pl.sprawdzam.app
     build-profile.template.json5   SDK versions; copy to build-profile.json5
     entry/                 entry module: ArkTS (EntryAbility, Index.ets, callengine/), C++ glue (CMakeLists.txt, PackageProvider.cpp)
-  android/                 Android container (Kotlin, callengine/ stub)
+  android/                 Android container (Kotlin, callengine/)
 ```
