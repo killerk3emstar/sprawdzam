@@ -5,7 +5,7 @@ One React Native code base for two targets:
 - **HarmonyOS** through React Native for OpenHarmony (RNOH), packaged as a `.hap` (Huawei challenge target)
 - **Android**
 
-The current screen is a hello world plus a CallEngine developer panel. Real senior-facing screens and the remaining native modules (contacts, notifications, widget) come next.
+Senior UI (home status, full-screen incoming call, in-call risk banner and family-password keypad, call result, settings) in PL/EN, plus a hidden developer panel (long-press the app name for 2 s). Native modules on HarmonyOS: CallEngine (audio + WebSockets), Notification Kit, Contacts Kit picker, Preferences + Asset Store Kit, optional Call Service Kit.
 
 ## Versions
 
@@ -162,7 +162,9 @@ The source of truth is `docs/APP_PROTOCOL.md` in the server repository (branch `
 
 - Trusted person and whitelist come from the system contact picker (`contact.selectContacts`, Contacts Kit). No contacts permission is needed (`READ_CONTACTS` is ACL-restricted on HarmonyOS). Whitelist numbers stay native and are sent only over the control channel in the `settings` message (see `../docs/APP_PROTOCOL_EXTENSIONS.md`); the app logs counts only.
 - Settings are stored in Preferences; the device token in Asset Store Kit.
-- Notification Kit: incoming protected call, warn/high risk, blocked scam (permission requested on first start).
+- Notification Kit: incoming protected call, warn/high risk, blocked scam (permission requested on first start). The incoming-call notification was confirmed on the emulator by a person; the others were checked in hilog.
+- Call Service Kit (system call UI): wired behind Settings > Developer > "System call screen (test)", default off. On the DevEco emulator `canIUse('SystemCapability.Telephony.VoipCallManager')` is `false`, so only a physical Huawei phone can show it; the app's own full-screen call screen is the default and the fallback.
+- Background: notifications and the control channel need the app process to be alive. HarmonyOS suspends background apps; keeping protection running while the app is closed needs a VoIP push (Push Kit `VoIPExtensionAbility`, AppGallery account) or a continuous task. Not done yet; for the demo the app stays in the foreground.
 
 ### Audio on the DevEco emulator
 
@@ -183,7 +185,7 @@ hdc -t 127.0.0.1:5555 shell aa start -a EntryAbility -b pl.sprawdzam.app --ps sp
   --ps mode accept|reject|ignore --ps ring 2 --ps secs 16 --ps dtmf 1234
 ```
 
-Fake backend options: `--scenario scam|benign`, `--password 1234`, `--password-timeout 20`, `--caller-hangup N`, `--idle 45`, `--device-token X` (1008 for any other token). Port 8000 is used by `basal-serve` on the dev Mac, hence 8765. The fake backend sends only zero PCM frames, so nothing is audible.
+Fake backend options: `--scenario scam|benign`, `--password 1234`, `--password-timeout 20`, `--caller-hangup N`, `--idle 45`, `--device-token X` (1008 for any other token). Port 8000 is used by `basal-serve` on the dev Mac and 8765 is the real backend's dev port, so run the fake backend on another port and map it to the app's default URL: `uv run --with websockets python tools/fake_backend.py --port 8766` and `hdc -t 127.0.0.1:5555 rport tcp:8765 tcp:8766`. The fake backend sends only zero PCM frames, so nothing is audible.
 
 Verified on the emulator (2026-10-03, native path): accept + correct password (call continues, then `senior_hangup`), wrong password (`scam_blocked` after the timeout), reject while ringing (`senior_hangup`), ignore (`timeout` after 30 s), `caller_hangup`, wrong device token (1008, backoff 1/2/5/10 s), 4000 idle close followed by a reconnect.
 
