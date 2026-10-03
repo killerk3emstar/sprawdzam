@@ -4,8 +4,9 @@
  * Playback: frames from the call WebSocket -> bounded jitter queue -> AudioRenderer (VOICE_COMMUNICATION).
  * Format on both sides: PCM16 LE, mono, 16 kHz (protocol v0, 640 bytes per 20 ms frame).
  *
- * Capture source: VOICE_COMMUNICATION on real phones (echo cancellation), MIC on the DevEco emulator,
- * where VOICE_COMMUNICATION capture stalls after a few buffers (audio spike, 2026-10-03).
+ * Capture source: VOICE_COMMUNICATION on real phones (echo cancellation), MIC on the DevEco emulator
+ * (team decision after early VOICE_COMMUNICATION stalls; later runs showed both sources work there once the
+ * macOS microphone permission for the emulator is granted).
  */
 import { audio } from '@kit.AudioKit';
 import { deviceInfo, BusinessError } from '@kit.BasicServicesKit';

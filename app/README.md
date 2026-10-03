@@ -154,7 +154,8 @@ API: `connectControl(url, deviceToken)`, `disconnectControl()`, `requestMicropho
 
 ### Audio on the DevEco emulator
 
-- Capture with `SOURCE_TYPE_VOICE_COMMUNICATION` stalls after a few buffers on the emulator; `SOURCE_TYPE_MIC` delivers about 32 kB/s at 16 kHz. `VoiceAudio` uses MIC when `deviceInfo.productModel === 'emulator'` and VOICE_COMMUNICATION (echo cancellation) on real phones. A watchdog emits `error` with code `audio_capture_stalled` if no buffers arrive for 1 s.
+- The macOS host must allow the emulator to use the microphone. While that was being sorted out, the first capture runs stalled (VOICE_COMMUNICATION after 3 buffers; MIC after about 8 s, then `stop()` failed with 6800301). After that, 10 s runs of MIC and VOICE_COMMUNICATION at 16 kHz and 48 kHz all delivered continuous buffers (16 kHz: about 32.6 kB/s, 51 callbacks of 640 B per second) and stopped cleanly.
+- `VoiceAudio` uses MIC when `deviceInfo.productModel === 'emulator'` and VOICE_COMMUNICATION (echo cancellation) on real phones. A watchdog emits `error` with code `audio_capture_stalled` if no buffers arrive for 1 s.
 - Playback with `STREAM_USAGE_VOICE_COMMUNICATION` goes to the speaker on the emulator.
 
 ### Local end-to-end test (silent)

@@ -7,7 +7,8 @@
  *     [--ps secs 10] [--ps play 1|0]
  * Defaults: source=voice (VOICE_COMMUNICATION), rate=16000, ch=1, secs=3, play=0.
  * AUDIBLE: play=1 and `spike beep` make sound on the device speaker. On the shared emulator, agree
- * on audible tests with the team first. Emulator finding: VOICE_COMMUNICATION capture stalls, MIC works.
+ * on audible tests with the team first. Emulator: capture stalls while the macOS microphone permission for
+ * the emulator is missing/changing; with it granted, MIC and VOICE_COMMUNICATION at 16/48 kHz are continuous.
  * Flow: request MICROPHONE -> log input devices -> record (RMS per 100 ms, buffer sizes, per-second
  * throughput, state/interrupt/device events) -> optionally play a 1 s 440 Hz tone and the recording.
  * Playback-only siren (MUSIC, VOICE_COMMUNICATION, VOICE_COMMUNICATION forced to SPEAKER):
