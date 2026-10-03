@@ -2,7 +2,7 @@
 
 `CallAdmission` ties the `/twilio/voice` webhook to the Media Stream WebSocket:
 
-* `/twilio/voice` calls `admit(call_sid)`. If fewer than `max_concurrent` calls are pending
+* The voice webhook calls `admit(call_sid)`. If fewer than `max_concurrent` calls are pending
   or active, it returns a one-time token (valid `token_ttl` seconds) that goes into the TwiML
   `<Parameter name="token">`. Otherwise the caller hears "protection unavailable".
 * The WebSocket `start` message must carry that token with the same CallSid; `activate`
@@ -22,12 +22,16 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from app.config import Lang
+
 
 @dataclass
-class _Pending:
+class Admission:
     call_sid: str
     token: str
     expires_at: float
+    caller: str = ""  # RAM only, shown masked to the senior, never logged
+    lang: Lang = "pl"
 
 
 class CallAdmission:
@@ -42,7 +46,7 @@ class CallAdmission:
         self.max_concurrent = max_concurrent
         self.token_ttl = token_ttl
         self._clock = clock
-        self._pending: dict[str, _Pending] = {}  # call_sid -> pending admission
+        self._pending: dict[str, Admission] = {}  # call_sid -> pending admission
         self._active: set[str] = set()
 
     def _purge(self) -> None:
@@ -59,7 +63,7 @@ class CallAdmission:
         self._purge()
         return len(self._pending)
 
-    def admit(self, call_sid: str) -> str | None:
+    def admit(self, call_sid: str, caller: str = "", lang: Lang = "pl") -> str | None:
         """Reserve a slot for `call_sid` and return its stream token, or None when full."""
         self._purge()
         if call_sid in self._active:
@@ -69,20 +73,22 @@ class CallAdmission:
             return None
         token = secrets.token_urlsafe(24)
         # A Twilio retry for the same CallSid replaces its token instead of taking a new slot.
-        self._pending[call_sid] = _Pending(call_sid, token, self._clock() + self.token_ttl)
+        self._pending[call_sid] = Admission(
+            call_sid, token, self._clock() + self.token_ttl, caller, lang
+        )
         return token
 
-    def activate(self, call_sid: str, token: str) -> bool:
-        """Consume the token for `call_sid`. True if the stream may proceed."""
+    def activate(self, call_sid: str, token: str) -> Admission | None:
+        """Consume the token for `call_sid`. Returns the admission if the stream may proceed."""
         self._purge()
         pending = self._pending.get(call_sid)
-        if pending is None or not hmac.compare_digest(pending.token, token):
-            return False
+        if pending is None or not token or not hmac.compare_digest(pending.token, token):
+            return None
         del self._pending[call_sid]
         if len(self._active) >= self.max_concurrent:
-            return False
+            return None
         self._active.add(call_sid)
-        return True
+        return pending
 
     def release(self, call_sid: str) -> None:
         self._active.discard(call_sid)

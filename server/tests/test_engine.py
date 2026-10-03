@@ -18,12 +18,17 @@ FAMILY_PL = "Mamo, przelałem ci pieniądze za prąd, wpadnę w niedzielę."
 
 
 class RecordingHandler:
+    """ActionHandler fake: records every assessment and the actions that fired."""
+
     def __init__(self, fail: bool = False) -> None:
+        self.assessments = []
         self.actions: list[Action] = []
         self.fail = fail
 
-    async def handle(self, call_id, action, assessment):
-        self.actions.append(action)
+    async def handle(self, assessment):
+        self.assessments.append(assessment)
+        if assessment.action is not Action.NONE:
+            self.actions.append(assessment.action)
         if self.fail:
             raise RuntimeError("boom")
 
@@ -141,6 +146,7 @@ async def test_normal_call_triggers_nothing():
         result = await monitor.evaluate(window(FAMILY_PL))
     assert result.level is Action.NONE
     assert handler.actions == []
+    assert len(handler.assessments) == 5  # every assessment reaches the handler
 
 
 async def test_failing_action_handler_does_not_break_evaluation(caplog):

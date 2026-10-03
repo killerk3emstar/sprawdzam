@@ -36,7 +36,9 @@ _RANGE_ERROR_TYPES = {"less_than_equal", "greater_than_equal", "finite_number"}
 
 
 class ActionHandler(Protocol):
-    async def handle(self, call_id: str, action: Action, assessment: RiskAssessment) -> None: ...
+    """Called after every assessment; `assessment.action` is set when a new action fires."""
+
+    async def handle(self, assessment: RiskAssessment) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -178,9 +180,9 @@ class CallRiskMonitor:
             scam_type=assessment.scam_type.value,
             categories=[name for name, on in assessment.categories.items() if on],
         )
-        if action is not Action.NONE and self.handler is not None:
+        if self.handler is not None:
             try:
-                await self.handler.handle(self.call_id, action, assessment)
+                await self.handler.handle(assessment)
             except Exception as exc:  # noqa: BLE001 - actions are best effort, call goes on
                 log_event(
                     logger,

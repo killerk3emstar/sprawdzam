@@ -1,76 +1,29 @@
 import json
 import logging
 import time
-import xml.etree.ElementTree as ET
 
 import pytest
 
-from app.twilio import stream as stream_module
+from app.calls import stream as stream_module
 from tests.conftest import (
     CALL_SID,
+    SCAM_TEXT,
     STREAM_SID,
     FakeSTT,
     RecordingActions,
+    admit,
+    drain_until_close,
+    media,
     post_voice,
+    start_message,
+    stop_message,
     tone_mulaw_frames,
     voice_params,
-)
-
-SCAM_TEXT = (
-    "Mówi komisarz z CBŚ. Proszę wypłacić gotówkę i przekazać ją kurierowi. Nikomu o tym nie mówić."
+    wait_until,
 )
 
 
-def admit(client, call_sid: str = CALL_SID) -> str:
-    root = ET.fromstring(post_voice(client, voice_params(call_sid=call_sid)).text)
-    params = {p.get("name"): p.get("value") for p in root.findall("Connect/Stream/Parameter")}
-    return params["token"]
-
-
-def start_message(token: str, call_sid: str = CALL_SID, **media_format) -> dict:
-    fmt = {"encoding": "audio/x-mulaw", "sampleRate": 8000, "channels": 1}
-    fmt.update(media_format)
-    return {
-        "event": "start",
-        "sequenceNumber": "1",
-        "streamSid": STREAM_SID,
-        "start": {
-            "accountSid": "AC" + "a" * 32,
-            "streamSid": STREAM_SID,
-            "callSid": call_sid,
-            "tracks": ["inbound"],
-            "customParameters": {"token": token, "lang": "pl", "callId": call_sid},
-            "mediaFormat": fmt,
-        },
-    }
-
-
-def media(payload: str, track: str = "inbound") -> dict:
-    return {
-        "event": "media",
-        "streamSid": STREAM_SID,
-        "media": {"track": track, "chunk": "1", "timestamp": "0", "payload": payload},
-    }
-
-
-def stop_message() -> dict:
-    return {
-        "event": "stop",
-        "streamSid": STREAM_SID,
-        "stop": {"accountSid": "AC" + "a" * 32, "callSid": CALL_SID},
-    }
-
-
-def wait_until(predicate, timeout: float = 3.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
-        time.sleep(0.01)
-    return False
-
-
-def test_full_stream_flow_with_malformed_messages(make_client, caplog):
+def test_full_stream_flow_blocks_scam_with_malformed_messages(make_client, caplog):
     caplog.set_level(logging.INFO)
     stt = FakeSTT([SCAM_TEXT])
     inner = RecordingActions()
@@ -102,25 +55,28 @@ def test_full_stream_flow_with_malformed_messages(make_client, caplog):
         )
         for payload in frames[100:]:
             ws.send_json(media(payload))
-        assert wait_until(lambda: CALL_SID in services.sessions)
-        ws.send_json(stop_message())
-        closing = ws.receive()
-        assert closing["type"] == "websocket.close"
+        # Window 1 -> warning, window 2 -> sustained high risk -> no family password
+        # configured -> scam blocked -> the backend closes the stream (provider hangs up).
+        messages, closing = drain_until_close(ws)
 
-    # STT got two 3 s windows of 16 kHz float32 audio in the call language.
+    assert closing["code"] == 1000
+    ringback = [m for m in messages if m["event"] == "media"]
+    assert len(ringback) == 50  # one 1 s ringback burst while nobody answered
     assert [c[:3] for c in stt.calls] == [(48000, 16000, "pl"), (48000, 16000, "pl")]
     assert all(str(c[3]) == "float32" for c in stt.calls)
-    # Window 1 -> warning; window 2 -> sustained high risk -> hang-up (dry run: not executed).
-    assert inner.kinds() == ["warn"]
-    messages = "\n".join(r.getMessage() for r in caplog.records)
-    assert "telephony_would_hang_up" in messages
-    assert messages.count("stream_malformed_message") == 5
-    # Everything is cleaned up after `stop`.
-    assert services.sessions == {}
-    assert services.admission.active_count == 0
+    # The app was told about the call.
+    (incoming,) = client.control.of_type("incoming_call")
+    assert incoming["callId"] == CALL_SID and incoming["caller"] == "+48 *** *** 001"
+    # REST hang-up as a backup is dry-run by default: nothing reached the provider.
+    assert inner.calls == []
+    log_text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "scam_blocked" in log_text and "telephony_would_hang_up" in log_text
+    assert log_text.count("stream_malformed_message") == 5
+    assert services.sessions == {} and services.admission.active_count == 0
+    assert services.hub.bridges == {}
     # Privacy: no transcript text and no DTMF digit in the logs.
-    assert "komisarz" not in messages and "kurierowi" not in messages
-    assert '"digit"' not in messages
+    assert "komisarz" not in log_text and "kurierowi" not in log_text
+    assert '"digit"' not in log_text
 
 
 def test_invalid_token_is_refused(make_client):
@@ -132,6 +88,7 @@ def test_invalid_token_is_refused(make_client):
         closing = ws.receive()
     assert closing == {"type": "websocket.close", "code": 1008, "reason": ""}
     assert client.app.state.services.sessions == {}
+    assert client.control.of_type("incoming_call") == []
 
 
 def test_extra_stream_without_admission_is_refused(make_client, make_settings):
@@ -147,7 +104,7 @@ def test_extra_stream_without_admission_is_refused(make_client, make_settings):
             second.send_json(start_message("no-slot", call_sid="CA" + "9" * 32))
             assert second.receive()["code"] == 1008
         first.send_json(stop_message())
-        assert first.receive()["type"] == "websocket.close"
+        assert drain_until_close(first)[1]["code"] == 1000
     assert services.admission.active_count == 0
 
 
@@ -160,6 +117,17 @@ def test_unsupported_media_format_is_refused(make_client):
     assert client.app.state.services.admission.active_count == 0
 
 
+def test_app_gone_before_stream_start_ends_call(make_client, caplog):
+    client = make_client(stt=FakeSTT())
+    token = admit(client)
+    client.app.state.services.hub.remove_control(client.control)  # app disconnected
+    with client.websocket_connect("/twilio/stream") as ws:
+        ws.send_json(start_message(token))
+        assert ws.receive()["code"] == 1000
+    assert any('"reason": "no_app"' in r.getMessage() for r in caplog.records)
+    assert client.app.state.services.admission.active_count == 0
+
+
 def test_max_call_duration_ends_stream(make_client, make_settings, caplog):
     caplog.set_level(logging.INFO)
     client = make_client(make_settings(MAX_CALL_SECONDS=0.3), stt=FakeSTT())
@@ -167,8 +135,8 @@ def test_max_call_duration_ends_stream(make_client, make_settings, caplog):
     started = time.monotonic()
     with client.websocket_connect("/twilio/stream") as ws:
         ws.send_json(start_message(token))
-        closing = ws.receive()  # server closes on its own
-    assert closing["type"] == "websocket.close" and closing["code"] == 1000
+        _, closing = drain_until_close(ws)  # server closes on its own
+    assert closing["code"] == 1000
     assert time.monotonic() - started < 3
     assert any("max_call_duration_reached" in r.getMessage() for r in caplog.records)
     assert client.app.state.services.sessions == {}
@@ -190,7 +158,7 @@ def test_too_many_malformed_messages_close_stream(make_client, monkeypatch):
         ws.send_json(start_message(token))
         for _ in range(4):
             ws.send_text("garbage")
-        assert ws.receive()["type"] == "websocket.close"
+        drain_until_close(ws)
     assert client.app.state.services.sessions == {}
 
 
@@ -204,6 +172,7 @@ def test_client_disconnect_cleans_up(make_client):
             ws.send_json(media(payload))
         assert wait_until(lambda: CALL_SID in services.sessions)
     assert wait_until(lambda: services.sessions == {} and services.admission.active_count == 0)
+    assert services.hub.bridges == {}
 
 
 def test_stt_failure_keeps_call_running(make_client, caplog):
@@ -218,7 +187,7 @@ def test_stt_failure_keeps_call_running(make_client, caplog):
         for payload in tone_mulaw_frames(3.2):
             ws.send_json(media(payload))
         ws.send_json(stop_message())
-        assert ws.receive()["code"] == 1000
+        assert drain_until_close(ws)[1]["code"] == 1000
     assert any("stt_failed" in r.getMessage() for r in caplog.records)
 
 

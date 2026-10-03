@@ -1,4 +1,4 @@
-"""Turns engine decisions into `CallActions` calls (the "what to do" for each risk level).
+"""Turns engine decisions into call actions (the "what to do" for each risk level).
 
 The alert texts contain the risk score and scam pattern only: no transcript, no caller data.
 """
@@ -6,10 +6,12 @@ The alert texts contain the risk score and scam pattern only: no transcript, no 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Coroutine
+from typing import TYPE_CHECKING, Any, Protocol
 
 from app.config import Lang
 from app.logging_setup import log_event
+from app.relay.protocol import EndReason
 from app.risk.models import Action, ScamType
 from app.telephony.actions import CallActions
 
@@ -63,42 +65,78 @@ def alert_voice(assessment: RiskAssessment, lang: Lang) -> str:
     )
 
 
-class IncidentResponder:
-    """Engine `ActionHandler` for one call."""
+class CallControl(Protocol):
+    """What the responder needs from the call (implemented by `CallBridge`)."""
 
-    def __init__(self, actions: CallActions, lang: Lang, trusted_number: str = "") -> None:
+    async def send_risk(self, assessment: RiskAssessment) -> None: ...
+
+    async def play_warning(self) -> None: ...
+
+    async def verify_family_password(self) -> bool: ...
+
+    async def end(self, reason: EndReason) -> None: ...
+
+    def spawn_background(self, coro: Coroutine[Any, Any, Any]) -> object: ...
+
+
+class IncidentResponder:
+    """Engine `ActionHandler` for one call.
+
+    * every assessment -> `risk` event to the senior's app
+    * warn -> warning tone in the app
+    * high -> family-password check; if it fails: end the call (`scam_blocked`, closing the
+      media stream ends the phone call), REST hang-up as a backup, then call and SMS the
+      trusted person. All spending goes through `GuardedCallActions`.
+    """
+
+    def __init__(
+        self, call: CallControl, actions: CallActions, lang: Lang, trusted_number: str = ""
+    ) -> None:
+        self.call = call
         self.actions = actions
         self.lang = lang
         self.trusted_number = trusted_number
 
-    async def handle(self, call_id: str, action: Action, assessment: RiskAssessment) -> None:
-        if action is Action.WARN:
-            await self._step("warn", self.actions.warn(call_id, assessment), call_id)
-        elif action is Action.VERIFY_THEN_HANGUP:
-            # TODO: ask for the family password over the stream before hanging up.
-            log_event(
-                logger, logging.INFO, "family_password_check_not_implemented", call_id=call_id
-            )
-            await self._step("hang_up", self.actions.hang_up(call_id), call_id)
-            if not self.trusted_number:
-                log_event(logger, logging.INFO, "no_trusted_person_configured", call_id=call_id)
-                return
-            await self._step(
-                "call_trusted_person",
-                self.actions.call_trusted_person(
-                    call_id, self.trusted_number, alert_voice(assessment, self.lang)
-                ),
-                call_id,
-            )
-            await self._step(
-                "send_sms",
-                self.actions.send_sms(
-                    call_id, self.trusted_number, alert_sms(assessment, self.lang)
-                ),
-                call_id,
-            )
+    async def handle(self, assessment: RiskAssessment) -> None:
+        await self.call.send_risk(assessment)
+        if assessment.action is Action.WARN:
+            await self.call.play_warning()
+        elif assessment.action is Action.VERIFY_THEN_HANGUP:
+            # In the background: the password wait must not stall speech recognition.
+            self.call.spawn_background(self.verify_or_block(assessment))
 
-    async def _step(self, name: str, coro, call_id: str) -> None:
+    async def verify_or_block(self, assessment: RiskAssessment) -> None:
+        call_id = assessment.call_id
+        if await self.call.verify_family_password():
+            log_event(logger, logging.INFO, "incident_cleared_by_password", call_id=call_id)
+            return
+        log_event(
+            logger,
+            logging.WARNING,
+            "scam_blocked",
+            call_id=call_id,
+            score=assessment.smoothed_score,
+            scam_type=assessment.scam_type.value,
+        )
+        await self._step("end_call", self.call.end(EndReason.SCAM_BLOCKED), call_id)
+        await self._step("hang_up", self.actions.hang_up(call_id), call_id)
+        if not self.trusted_number:
+            log_event(logger, logging.INFO, "no_trusted_person_configured", call_id=call_id)
+            return
+        await self._step(
+            "call_trusted_person",
+            self.actions.call_trusted_person(
+                call_id, self.trusted_number, alert_voice(assessment, self.lang), self.lang
+            ),
+            call_id,
+        )
+        await self._step(
+            "send_sms",
+            self.actions.send_sms(call_id, self.trusted_number, alert_sms(assessment, self.lang)),
+            call_id,
+        )
+
+    async def _step(self, name: str, coro: Coroutine[Any, Any, Any], call_id: str) -> None:
         # One failing step must not stop the others (e.g. SMS still goes out if hang-up fails).
         try:
             await coro

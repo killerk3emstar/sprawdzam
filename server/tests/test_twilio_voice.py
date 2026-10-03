@@ -139,3 +139,23 @@ def test_health_reports_configuration_without_secrets(make_client, make_settings
     text = response.text
     assert AUTH_TOKEN not in text
     assert "+48600000001" not in text
+
+
+def test_no_app_connected_plays_unavailable_and_hangs_up(make_client, caplog):
+    client = make_client(app_online=False)
+    response = post_voice(client, voice_params())
+    assert response.status_code == 200
+    root = ET.fromstring(response.text)
+    assert root.find("Connect") is None
+    assert root.find("Hangup") is not None
+    assert "chwilowo niedostępna" in root.find("Say").text
+    assert any('"reason": "no_app"' in r.getMessage() for r in caplog.records)
+    assert client.app.state.services.admission.pending_count == 0
+
+
+def test_health_reports_app_and_provider(make_client):
+    data = make_client().get("/health").json()
+    assert data["provider"] == "twilio"
+    assert data["app"]["connected"] is True
+    assert data["app"]["device_token_configured"] is True
+    assert data["dev_tools"] is False

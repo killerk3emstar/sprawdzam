@@ -20,6 +20,7 @@ dependencies = [
 dev = [
     "httpx2>=2.13.1",
     "pytest>=8.3",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.6",
 ]
 
@@ -30,6 +31,7 @@ package = false
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-q"
+timeout = 60
 
 [tool.ruff]
 line-length = 100

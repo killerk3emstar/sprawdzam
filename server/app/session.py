@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # Below this RMS (~ -50 dBFS) a window is treated as silence and not sent to STT.
 # Placeholder for Silero VAD.
 DEFAULT_SILENCE_RMS = 0.003
+_EMPTY = np.zeros(0, dtype=np.float32)
 
 
 class CallSession:
@@ -57,7 +58,6 @@ class CallSession:
         self._buffered = 0
         self._queue: asyncio.Queue[np.ndarray | None] = asyncio.Queue(maxsize=queue_size)
         self._worker: asyncio.Task[None] | None = None
-        self._dtmf: list[str] = []
         self.stats = {"frames": 0, "windows": 0, "dropped_windows": 0, "stt_errors": 0}
         self.degraded = False
         self.closed = False
@@ -88,7 +88,6 @@ class CallSession:
                 worker.cancel()
             self._buffer.clear()
             self._buffered = 0
-            self._dtmf.clear()
             self.transcript.clear()
             log_event(
                 logger,
@@ -100,10 +99,11 @@ class CallSession:
             )
 
     # ------------------------------------------------------------------ input
-    def feed_mulaw(self, payload: bytes) -> None:
-        """Add one Twilio media frame (mu-law 8 kHz)."""
+    def feed_mulaw(self, payload: bytes) -> np.ndarray:
+        """Add one media frame (mu-law 8 kHz). Returns the newly resampled 16 kHz float32
+        audio (possibly empty), which the bridge forwards to the senior's app."""
         if self.closed or not payload:
-            return
+            return _EMPTY
         self.stats["frames"] += 1
         pcm16k = self.resampler.process(to_float32(mulaw_decode(payload)))
         if pcm16k.size:
@@ -111,6 +111,7 @@ class CallSession:
             self._buffered += pcm16k.size
         while self._buffered >= self.window_samples:
             self._emit_window()
+        return pcm16k
 
     def _emit_window(self) -> None:
         audio = np.concatenate(self._buffer)
@@ -124,10 +125,6 @@ class CallSession:
             self.stats["dropped_windows"] += 1
             log_event(logger, logging.WARNING, "stt_backlog_drop", call_id=self.call_sid)
         self._queue.put_nowait(window)
-
-    def on_dtmf(self, digit: str) -> None:
-        """Keep keypad digits in RAM for the future family-password check (never logged)."""
-        self._dtmf = (self._dtmf + [digit])[-16:]
 
     # ------------------------------------------------------------------ worker
     async def _run(self) -> None:

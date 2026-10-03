@@ -1,22 +1,8 @@
-"""Voice prompts played by Twilio <Say>, in Polish and English."""
+"""Texts of the voice prompts played to the caller, in Polish and English."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from app.config import Lang
-
-
-@dataclass(frozen=True)
-class Voice:
-    language: str  # BCP-47 tag for <Say language=...>
-    voice: str  # Twilio <Say voice=...> (Amazon Polly voices)
-
-
-VOICES: dict[Lang, Voice] = {
-    "pl": Voice(language="pl-PL", voice="Polly.Ewa"),
-    "en": Voice(language="en-US", voice="Polly.Joanna"),
-}
 
 PROTECTION_NOTICE: dict[Lang, str] = {
     "pl": (

@@ -63,3 +63,41 @@ def test_stream_resampler_doubles_length_and_keeps_frequency():
     spectrum = np.abs(np.fft.rfft(audio))
     peak_hz = np.argmax(spectrum) * 16000 / audio.size
     assert abs(peak_hz - 1000) < 5
+
+
+def test_pcm16le_roundtrip_and_validation():
+    from app.audio.convert import float32_to_pcm16le, pcm16le_to_float32
+
+    samples = np.array([0.0, 0.5, -0.5, -1.0], dtype=np.float32)
+    data = float32_to_pcm16le(samples)
+    assert data[:4] == b"\x00\x00\x00\x40"  # little-endian 16384 for 0.5
+    assert np.allclose(pcm16le_to_float32(data), samples, atol=1e-4)
+    with pytest.raises(ValueError):
+        pcm16le_to_float32(b"\x00\x01\x02")
+
+
+def test_framer_keeps_remainder():
+    from app.audio.convert import Framer
+
+    framer = Framer(4)
+    assert framer.push(b"abcdef") == [b"abcd"]
+    assert framer.push(b"gh") == [b"efgh"]
+    assert framer.push(b"i") == []
+
+
+def test_pcm_to_mulaw_frames():
+    from app.audio.convert import pcm_to_mulaw_frames
+
+    frames = pcm_to_mulaw_frames(np.zeros(16000, dtype=np.float32), 16000)
+    assert len(frames) == 50 and all(len(f) == 160 for f in frames)
+    assert set(frames[0]) == {0xFF}  # silence in mu-law
+    assert len(pcm_to_mulaw_frames((np.ones(8000) * 1000).astype(np.int16), 8000)) == 50
+
+
+def test_tones():
+    from app.calls import tones
+
+    ring = tones.ringback_frames()
+    assert len(ring) == 50 and all(len(f) == 160 for f in ring)
+    warning = tones.warning_frames()
+    assert warning and all(len(f) == 640 for f in warning)

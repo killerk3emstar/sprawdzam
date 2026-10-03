@@ -29,3 +29,37 @@ def mask_number(number: str) -> str:
     if len(number) <= 5:
         return "*" * len(number)
     return number[:3] + "*" * (len(number) - 5) + number[-2:]
+
+
+_COUNTRY_CODES = (
+    "1",
+    "7",
+    "20",
+    "27",
+    "30",
+    "31",
+    "32",
+    "33",
+    "34",
+    "36",
+    "39",
+    "40",
+    "41",
+    "43",
+    "44",
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+)
+
+
+def mask_caller(number: str) -> str:
+    """Display form for the senior's app, e.g. '+48 *** *** 123'; 'unknown' if hidden."""
+    number = number.strip().replace(" ", "")
+    if not is_e164(number):
+        return "unknown"
+    digits = number[1:]
+    country = next((c for c in _COUNTRY_CODES if digits.startswith(c)), digits[:2])
+    return f"+{country} *** *** {digits[-3:]}"

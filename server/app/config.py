@@ -6,6 +6,7 @@ Variable names match `.env.example` at the repository root. Secret values are ke
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from typing import Literal
 
@@ -78,6 +79,19 @@ class Settings(BaseSettings):
     # Directory for the persisted daily counters (no phone numbers or content are stored).
     DATA_DIR: str = "data"
 
+    # Senior app relay (protocol v0, docs/APP_PROTOCOL.md)
+    # Shared secret of the senior's device for WS /app/control (>= 16 characters).
+    APP_DEVICE_TOKEN: SecretStr = SecretStr("")
+    # Ringing time before an unanswered protected call is ended.
+    APP_ACCEPT_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, le=300)
+    # Family password (digits, entered as DTMF by the caller or the senior). Empty = none:
+    # a high-risk call is then blocked right after the verify_password prompt.
+    FAMILY_PASSWORD: SecretStr = SecretStr("")
+    VERIFY_PASSWORD_SECONDS: float = Field(default=20.0, gt=0, le=120)
+
+    # Browser test pages /dev/caller and /dev/senior (never enable in production).
+    DEV_TOOLS: bool = False
+
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
     @field_validator("PUBLIC_BASE_URL")
@@ -108,6 +122,22 @@ class Settings(BaseSettings):
             raise ValueError("must be an E.164 phone number, e.g. +48123456789")
         return value
 
+    @field_validator("APP_DEVICE_TOKEN")
+    @classmethod
+    def _check_device_token(cls, value: SecretStr) -> SecretStr:
+        token = value.get_secret_value()
+        if token and (len(token) < 16 or token != token.strip()):
+            raise ValueError("APP_DEVICE_TOKEN must be at least 16 characters, no spaces")
+        return value
+
+    @field_validator("FAMILY_PASSWORD")
+    @classmethod
+    def _check_family_password(cls, value: SecretStr) -> SecretStr:
+        password = value.get_secret_value()
+        if password and not re.fullmatch(r"[0-9]{3,12}", password):
+            raise ValueError("FAMILY_PASSWORD must be 3-12 digits")
+        return value
+
     @field_validator("OUTBOUND_ALLOWLIST")
     @classmethod
     def _check_allowlist(cls, value: str) -> str:
@@ -128,15 +158,14 @@ class Settings(BaseSettings):
     def twilio_auth_token(self) -> str:
         return self.TWILIO_AUTH_TOKEN.get_secret_value()
 
-    @property
-    def stream_url(self) -> str:
-        """WebSocket URL Twilio connects to for Media Streams."""
+    def ws_url(self, path: str) -> str:
+        """Public WebSocket URL for `path` (https -> wss, http -> ws)."""
         base = self.PUBLIC_BASE_URL
         if base.startswith("https://"):
             base = "wss://" + base.removeprefix("https://")
         else:
             base = "ws://" + base.removeprefix("http://")
-        return f"{base}/twilio/stream"
+        return f"{base}{path}"
 
     def public_url(self, path: str, query: str = "") -> str:
         url = f"{self.PUBLIC_BASE_URL}{path}"

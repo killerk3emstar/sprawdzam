@@ -6,7 +6,7 @@ able to run up a bill or call strangers. Every money-spending action passes thes
 1. Dry run (`TELEPHONY_DRY_RUN`, default true): log "would do X", execute nothing.
 2. Destination checks: valid E.164, never our own `TWILIO_NUMBER` (call loops), and only
    numbers on `OUTBOUND_ALLOWLIST`.
-3. Per-incident dedupe: at most one hang-up, one trusted-person call and one SMS per
+3. Per-incident dedupe: at most one REST hang-up, one trusted-person call and one SMS per
    incoming call, however many high-risk readings arrive.
 4. Daily caps (`MAX_OUTBOUND_CALLS_PER_DAY`, `MAX_SMS_PER_DAY`), persisted in a small JSON
    file (date + counts only, no numbers or content) so a restart does not reset them. The
@@ -29,16 +29,14 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
+from app.config import Lang
 from app.logging_setup import log_event
 from app.telephony.actions import CallActions
 from app.telephony.numbers import is_e164, mask_number
-
-if TYPE_CHECKING:
-    from app.risk.engine import RiskAssessment
 
 logger = logging.getLogger(__name__)
 
@@ -143,13 +141,6 @@ class GuardedCallActions:
         self._done: OrderedDict[str, set[str]] = OrderedDict()
 
     # ------------------------------------------------------------------ public API
-    async def warn(self, call_sid: str, assessment: RiskAssessment) -> GuardOutcome:
-        # In-call audio and app alerts cost nothing; only dedupe.
-        if self._seen(call_sid, "warn"):
-            return self._log(GuardOutcome.DUPLICATE, "warn", call_sid)
-        self._mark(call_sid, "warn")
-        return await self._run("warn", call_sid, self.inner.warn(call_sid, assessment))
-
     async def hang_up(self, call_sid: str) -> GuardOutcome:
         if self._seen(call_sid, "hang_up"):
             return self._log(GuardOutcome.DUPLICATE, "hang_up", call_sid)
@@ -158,14 +149,16 @@ class GuardedCallActions:
             return self._log(GuardOutcome.DRY_RUN, "hang_up", call_sid)
         return await self._run("hang_up", call_sid, self.inner.hang_up(call_sid))
 
-    async def call_trusted_person(self, call_sid: str, to: str, message: str) -> GuardOutcome:
+    async def call_trusted_person(
+        self, call_sid: str, to: str, message: str, lang: Lang = "pl"
+    ) -> GuardOutcome:
         return await self._outbound(
             "call",
             "calls",
             self.config.max_calls_per_day,
             call_sid,
             to,
-            lambda: self.inner.call_trusted_person(call_sid, to, message),
+            lambda: self.inner.call_trusted_person(call_sid, to, message, lang),
         )
 
     async def send_sms(self, call_sid: str, to: str, body: str) -> GuardOutcome:

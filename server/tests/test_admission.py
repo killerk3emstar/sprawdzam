@@ -52,6 +52,14 @@ def test_expired_tokens_free_the_slot():
     assert not admission.activate("CA_a", token)
 
 
+def test_activate_returns_caller_and_lang():
+    admission = CallAdmission(max_concurrent=1)
+    token = admission.admit("CA_a", caller="+48500000001", lang="en")
+    admitted = admission.activate("CA_a", token)
+    assert admitted.caller == "+48500000001" and admitted.lang == "en"
+    assert admission.activate("CA_b", "") is None
+
+
 def test_active_call_cannot_be_admitted_twice():
     admission = CallAdmission(max_concurrent=3)
     token = admission.admit("CA_a")

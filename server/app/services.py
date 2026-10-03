@@ -8,16 +8,20 @@ from fastapi import Request
 from starlette.requests import HTTPConnection
 
 from app.config import Settings
+from app.relay.hub import AppHub
 from app.risk.engine import RiskEngine
 from app.session import CallSession
 from app.stt.base import STTBackend
 from app.telephony.admission import CallAdmission, SlidingWindowRateLimiter
 from app.telephony.guard import GuardedCallActions
+from app.telephony.provider import TelephonyProvider
 
 
 @dataclass
 class Services:
     settings: Settings
+    provider: TelephonyProvider
+    hub: AppHub
     stt: STTBackend
     engine: RiskEngine
     actions: GuardedCallActions

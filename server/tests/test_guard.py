@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import date
@@ -6,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.risk.engine import RiskEngine
-from app.risk.models import Action, ScamType
+from app.risk.models import ScamType
 from app.telephony.guard import (
     DailyCounterStore,
     GuardConfig,
@@ -181,30 +182,81 @@ def test_number_helpers():
     assert mask_number("+48600000001") == "+48*******01"
 
 
+class FakeCall:
+    """CallControl fake for the responder."""
+
+    def __init__(self, password_ok: bool = False) -> None:
+        self.events: list[str] = []
+        self.password_ok = password_ok
+        self.tasks: list[asyncio.Task] = []
+
+    async def send_risk(self, assessment) -> None:
+        self.events.append(f"risk:{assessment.level.value}")
+
+    async def play_warning(self) -> None:
+        self.events.append("warning_tone")
+
+    async def verify_family_password(self) -> bool:
+        self.events.append("verify_password")
+        return self.password_ok
+
+    async def end(self, reason) -> None:
+        self.events.append(f"end:{reason.value}")
+
+    def spawn_background(self, coro):
+        task = asyncio.ensure_future(coro)
+        self.tasks.append(task)
+        return task
+
+
 async def test_responder_full_incident_through_guard(tmp_path):
     inner = RecordingActions()
     guard = make_guard(tmp_path, inner)
+    call = FakeCall()
     engine = RiskEngine(warn_threshold=50, hangup_threshold=80)
-    monitor = engine.start_call("CA1", "pl", IncidentResponder(guard, "pl", TRUSTED))
+    monitor = engine.start_call("CA1", "pl", IncidentResponder(call, guard, "pl", TRUSTED))
     transcript = TranscriptWindow()
     transcript.add("caller", "Jestem z CBŚ, proszę przekazać gotówkę kurierowi, nikomu nie mów.")
     for _ in range(6):  # many high readings
         await monitor.evaluate(transcript)
-    assert inner.kinds() == ["warn", "hang_up", "call", "sms"]
+    await asyncio.gather(*call.tasks)
+    assert call.events[:3] == [
+        "risk:warn",
+        "warning_tone",
+        "risk:verify_family_password_then_hangup",
+    ]
+    assert call.events.count("verify_password") == 1
+    assert "end:scam_blocked" in call.events
+    assert inner.kinds() == ["hang_up", "call", "sms"]
+
+
+async def test_responder_password_ok_clears_incident(tmp_path):
+    inner = RecordingActions()
+    call = FakeCall(password_ok=True)
+    responder = IncidentResponder(call, make_guard(tmp_path, inner), "pl", TRUSTED)
+    await responder.verify_or_block(
+        SimpleNamespace(call_id="CA1", smoothed_score=95, scam_type=ScamType.POLICE)
+    )
+    assert call.events == ["verify_password"]
+    assert inner.calls == []
 
 
 async def test_responder_without_trusted_person_only_hangs_up(tmp_path):
     inner = RecordingActions()
-    responder = IncidentResponder(make_guard(tmp_path, inner), "en", "")
-    await responder.handle("CA1", Action.VERIFY_THEN_HANGUP, assessment=None)
+    call = FakeCall()
+    responder = IncidentResponder(call, make_guard(tmp_path, inner), "en", "")
+    await responder.verify_or_block(
+        SimpleNamespace(call_id="CA1", smoothed_score=95, scam_type=ScamType.BANK)
+    )
+    assert call.events == ["verify_password", "end:scam_blocked"]
     assert inner.kinds() == ["hang_up"]
 
 
 async def test_responder_continues_after_failed_step(tmp_path):
     inner = RecordingActions(fail={"hang_up"})
-    responder = IncidentResponder(inner, "pl", TRUSTED)
-    assessment = SimpleNamespace(smoothed_score=91, scam_type=ScamType.POLICE)
-    await responder.handle("CA1", Action.VERIFY_THEN_HANGUP, assessment)
+    responder = IncidentResponder(FakeCall(), inner, "pl", TRUSTED)
+    assessment = SimpleNamespace(call_id="CA1", smoothed_score=91, scam_type=ScamType.POLICE)
+    await responder.verify_or_block(assessment)
     assert inner.kinds() == ["hang_up", "call", "sms"]
     sms = alert_sms(assessment, "pl")
     assert "91/100" in sms and "policjanta" in sms

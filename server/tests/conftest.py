@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
+import time
+import xml.etree.ElementTree as ET
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +26,7 @@ AUTH_TOKEN = "test-auth-token-not-a-real-secret"
 ACCOUNT_SID = "AC" + "a" * 32
 CALL_SID = "CA" + "1" * 32
 STREAM_SID = "MZ" + "2" * 32
+DEVICE_TOKEN = "test-device-token-0123456789"
 
 
 @pytest.fixture(autouse=True)
@@ -46,6 +50,7 @@ def make_settings(tmp_path) -> Callable[..., Settings]:
             "TWILIO_ACCOUNT_SID": ACCOUNT_SID,
             "TWILIO_NUMBER": "+48100000000",
             "DATA_DIR": str(tmp_path / "data"),
+            "APP_DEVICE_TOKEN": DEVICE_TOKEN,
         }
         values.update(overrides)
         return Settings(_env_file=None, **values)
@@ -93,6 +98,24 @@ class FakeDecision:
         return self.result
 
 
+class FakeControl:
+    """Stands in for an open senior-app control channel; records what the hub sends."""
+
+    def __init__(self) -> None:
+        self.closed = False
+        self.messages: list[dict[str, Any]] = []
+
+    async def send_json(self, data: dict[str, Any]) -> bool:
+        self.messages.append(data)
+        return True
+
+    async def close(self, code: int = 1000) -> None:
+        self.closed = True
+
+    def of_type(self, kind: str) -> list[dict[str, Any]]:
+        return [m for m in self.messages if m.get("type") == kind]
+
+
 class RecordingActions:
     """Inner CallActions that records what would have been sent to Twilio."""
 
@@ -105,13 +128,12 @@ class RecordingActions:
         if entry[0] in self.fail:
             raise RuntimeError("simulated Twilio failure")
 
-    async def warn(self, call_sid: str, assessment: Any) -> None:
-        await self._record("warn", call_sid)
-
     async def hang_up(self, call_sid: str) -> None:
         await self._record("hang_up", call_sid)
 
-    async def call_trusted_person(self, call_sid: str, to: str, message: str) -> None:
+    async def call_trusted_person(
+        self, call_sid: str, to: str, message: str, lang: str = "pl"
+    ) -> None:
         await self._record("call", call_sid, to)
 
     async def send_sms(self, call_sid: str, to: str, body: str) -> None:
@@ -156,6 +178,89 @@ def tone_mulaw_frames(seconds: float, freq: float = 1000.0, amplitude: float = 0
     return [base64.b64encode(mulaw[i : i + 160]).decode() for i in range(0, n, 160)]
 
 
+SCAM_TEXT = (
+    "Mówi komisarz z CBŚ. Proszę wypłacić gotówkę i przekazać ją kurierowi. Nikomu o tym nie mówić."
+)
+
+
+def admit(client, call_sid: str = CALL_SID) -> str:
+    root = ET.fromstring(post_voice(client, voice_params(call_sid=call_sid)).text)
+    params = {p.get("name"): p.get("value") for p in root.findall("Connect/Stream/Parameter")}
+    return params["token"]
+
+
+def start_message(token: str, call_sid: str = CALL_SID, **media_format) -> dict:
+    fmt = {"encoding": "audio/x-mulaw", "sampleRate": 8000, "channels": 1}
+    fmt.update(media_format)
+    return {
+        "event": "start",
+        "sequenceNumber": "1",
+        "streamSid": STREAM_SID,
+        "start": {
+            "accountSid": "AC" + "a" * 32,
+            "streamSid": STREAM_SID,
+            "callSid": call_sid,
+            "tracks": ["inbound"],
+            "customParameters": {"token": token, "lang": "pl", "callId": call_sid},
+            "mediaFormat": fmt,
+        },
+    }
+
+
+def media(payload: str, track: str = "inbound") -> dict:
+    return {
+        "event": "media",
+        "streamSid": STREAM_SID,
+        "media": {"track": track, "chunk": "1", "timestamp": "0", "payload": payload},
+    }
+
+
+def stop_message() -> dict:
+    return {
+        "event": "stop",
+        "streamSid": STREAM_SID,
+        "stop": {"accountSid": "AC" + "a" * 32, "callSid": CALL_SID},
+    }
+
+
+def drain_until_close(ws, limit: int = 20_000) -> tuple[list[Any], dict[str, Any]]:
+    """Receive until the server closes the socket. Returns (messages, close message); JSON
+    text frames are decoded, binary frames are returned as bytes."""
+    messages: list[Any] = []
+    for _ in range(limit):
+        message = ws.receive()
+        if message["type"] == "websocket.close":
+            return messages, message
+        if message.get("text") is not None:
+            messages.append(json.loads(message["text"]))
+        else:
+            messages.append(message.get("bytes"))
+    raise AssertionError("socket was not closed")
+
+
+def receive_json(ws, kind: str | None = None, limit: int = 20_000) -> dict[str, Any]:
+    """Next JSON message (of `kind` if given), skipping binary frames and other types."""
+    for _ in range(limit):
+        message = ws.receive()
+        if message["type"] == "websocket.close":
+            raise AssertionError(f"socket closed while waiting for {kind}: {message}")
+        if message.get("text") is None:
+            continue
+        data = json.loads(message["text"])
+        if kind is None or data.get("type") == kind or data.get("event") == kind:
+            return data
+    raise AssertionError(f"no {kind} message")
+
+
+def wait_until(predicate, timeout: float = 3.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return False
+
+
 @pytest.fixture
 def make_client(make_settings):
     """Build a TestClient around an app wired with fakes."""
@@ -163,11 +268,18 @@ def make_client(make_settings):
 
     from app.factory import create_app
 
-    def _make(settings: Settings | None = None, **kwargs: Any) -> TestClient:
+    def _make(
+        settings: Settings | None = None, *, app_online: bool = True, **kwargs: Any
+    ) -> TestClient:
+        """`app_online=True` registers a FakeControl (as if the senior app were connected);
+        it is available as `client.control`."""
         app = create_app(settings or make_settings(), **kwargs)
         client = TestClient(app)
         client.__enter__()
         clients.append(client)
+        client.control = FakeControl()  # type: ignore[attr-defined]
+        if app_online:
+            app.state.services.hub.add_control(client.control)
         return client
 
     yield _make

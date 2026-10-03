@@ -1,4 +1,4 @@
-"""Twilio Media Streams WebSocket messages: validation of inbound, builders for outbound.
+"""Twilio Media Streams WebSocket messages (inbound validation models).
 
 Reference: https://www.twilio.com/docs/voice/media-streams/websocket-messages
 """
@@ -9,11 +9,7 @@ import base64
 import binascii
 from typing import Annotated, Literal
 
-import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter
-
-from app.audio.g711 import mulaw_encode
-from app.audio.resample import TWILIO_RATE, resample
 
 Sid = Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}[0-9a-fA-F]{32}$")]
 ShortStr = Annotated[str, StringConstraints(max_length=256)]
@@ -108,37 +104,3 @@ InboundMessage = Annotated[
     Field(discriminator="event"),
 ]
 inbound_adapter: TypeAdapter[InboundMessage] = TypeAdapter(InboundMessage)
-
-
-# ---------------------------------------------------------------------- outbound builders
-def media_message(stream_sid: str, mulaw: bytes) -> dict[str, object]:
-    return {
-        "event": "media",
-        "streamSid": stream_sid,
-        "media": {"payload": base64.b64encode(mulaw).decode("ascii")},
-    }
-
-
-def mark_message(stream_sid: str, name: str) -> dict[str, object]:
-    return {"event": "mark", "streamSid": stream_sid, "mark": {"name": name}}
-
-
-def clear_message(stream_sid: str) -> dict[str, object]:
-    return {"event": "clear", "streamSid": stream_sid}
-
-
-def audio_to_media_messages(
-    stream_sid: str,
-    audio: np.ndarray,
-    sample_rate: int,
-    frame_ms: int = 20,
-) -> list[dict[str, object]]:
-    """Convert PCM (int16 or float32 in [-1, 1]) at any rate into Twilio `media` messages
-    with mu-law 8 kHz payloads, split into `frame_ms` frames."""
-    samples = np.asarray(audio)
-    if np.issubdtype(samples.dtype, np.integer):
-        samples = samples.astype(np.float32) / 32768.0
-    samples = resample(samples, sample_rate, TWILIO_RATE)
-    mulaw = mulaw_encode(samples)
-    step = TWILIO_RATE * frame_ms // 1000
-    return [media_message(stream_sid, mulaw[i : i + step]) for i in range(0, len(mulaw), step)]

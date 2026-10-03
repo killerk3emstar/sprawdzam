@@ -26,6 +26,14 @@ async def health(request: Request) -> dict[str, object]:
         "version": __version__,
         "default_lang": settings.DEFAULT_LANG,
         "protection": "model+rules" if services.decision_backend_name else "rules_only",
+        "provider": services.provider.name,
+        "app": {
+            "device_token_configured": services.hub.device_token_configured,
+            "connected": services.hub.online,
+            "control_connections": services.hub.control_count,
+            "protocol": "v0",
+        },
+        "dev_tools": settings.DEV_TOOLS,
         "twilio": {
             "account_sid_configured": bool(settings.TWILIO_ACCOUNT_SID),
             "auth_token_configured": token_set,
