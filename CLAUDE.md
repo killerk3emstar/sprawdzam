@@ -20,7 +20,7 @@ Ochrona seniorów przed oszustwami telefonicznymi („na wnuczka”, „na polic
 
 - Połączenia od kontaktów dzwonią normalnie i nikt ich nie analizuje.
 - Numer spoza kontaktów: telefon go odrzuca, operator przekierowuje go („gdy zajęte”) do naszej usługi w chmurze. Dzwoniący słyszy komunikat o ochronie, a senior odbiera rozmowę w naszej apce (VoIP przez nasz backend).
-- Backend zamienia mowę na tekst i na bieżąco ocenia ryzyko. Ryzyko średnie: ostrzeżenie głosowe i powiadomienie. Ryzyko wysokie: pytanie o hasło rodzinne, rozłączenie, telefon i SMS do osoby zaufanej, alert w panelu rodziny.
+- Backend zamienia mowę na tekst i na bieżąco ocenia ryzyko. Ryzyko średnie: ostrzeżenie głosowe i powiadomienie. Ryzyko wysokie: pytanie o hasło rodzinne, rozłączenie, telefon i SMS do osoby zaufanej (panel rodziny pominięty, decyzja 3.10).
 - Nie zapisujemy audio ani transkrypcji, tylko krótkie streszczenie alertu. Nie rozpoznajemy emocji ani biometrii głosu (AI Act: rozpoznawanie emocji z głosu to system wysokiego ryzyka).
 
 Zgłaszamy jeden projekt do dwóch zadań:
@@ -59,7 +59,7 @@ Dzwoniący ──► telefon seniora (odrzuca nieznany numer) ──► operator
             ├─ ocena: basal-1 (schemat pytań) + reguły → wynik wygładzony
             ├─ akcje: ostrzeżenie, hasło rodzinne, rozłączenie (Twilio REST), telefon + SMS do osoby zaufanej
             └─ przekazywanie dźwięku w obie strony: Twilio ⇄ WS /app/{callId} ⇄ apka seniora
-     panel rodziny (web) ◄── alerty, ustawienia, hasło rodzinne
+     (panel rodziny pominięty; alerty idą SMS-em i telefonem do osoby zaufanej)
 ```
 
 ### Moduły natywne
