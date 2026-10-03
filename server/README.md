@@ -7,16 +7,16 @@ real time.
 ```
 provider ── POST /twilio/voice ──► signature, rate limit, app online?, call slot ──► TwiML:
                                     <Say> protection notice + <Connect><Stream wss://…/twilio/stream>
-provider ══ WS /twilio/stream ══► μ-law 8 kHz → PCM 16 kHz ─┬─► 3 s windows → STTBackend
-                                                             │     → RiskEngine (model + rules)
+provider ══ WS /twilio/stream ══► μ-law 8 kHz → PCM 16 kHz ─┬─► 3–8 s speech segments → Whisper
+                                                             │     → RiskEngine (basal + rules)
                                                              │     → IncidentResponder
                                                              └─► CallBridge ══ WS /app/call/{id} ══► senior app
 senior app ══ WS /app/control (incoming_call, protection status) ══ AppHub
 ```
 
-Status: everything external sits behind an interface. Speech-to-text is a no-op (`NoopSTT`)
-and the decision model is not wired in (rules only); the whisper.cpp and basal-1 clients come
-next. Twilio REST actions exist but run in dry-run mode by default.
+Status: speech-to-text (whisper.cpp `whisper-server`) and the decision model (basal-1.0-4.5B via
+`basal-serve`) are wired in; without them the backend falls back to no transcript / keyword
+rules. Twilio REST actions exist but run in dry-run mode by default.
 
 ## Requirements
 
@@ -27,10 +27,15 @@ next. Twilio REST actions exist but run in dry-run mode by default.
 ```bash
 cd server
 uv sync                                    # creates .venv with locked dependencies
-uv run uvicorn app.main:app --reload       # http://127.0.0.1:8000/health
+scripts/run_dev.sh --reload                # http://127.0.0.1:8765/health
 uv run pytest                              # full test suite, no network access needed
+uv run pytest -m live                      # opt in: real whisper-server :8080 / basal-serve :8000
 uv run ruff check . && uv run ruff format --check .
 ```
+
+The backend's dev port is **8765** (port 8000 belongs to `basal-serve`, 8080 to
+`whisper-server`). `scripts/run_dev.sh` is `uvicorn app.main:app --host 127.0.0.1 --port 8765`;
+set `PORT` to change it.
 
 Configuration comes from environment variables or a `.env` file (the repository root `.env`
 first, then an optional `server/.env`). Copy `../.env.example` to `../.env`. Without
@@ -42,12 +47,12 @@ every call hears "protection temporarily unavailable".
 
 ```bash
 cd server
-DEV_TOOLS=true APP_DEVICE_TOKEN=dev-token-change-me-123 uv run uvicorn app.main:app --port 8000
+DEV_TOOLS=true APP_DEVICE_TOKEN=dev-token-change-me-123 scripts/run_dev.sh
 ```
 
-1. Open <http://localhost:8000/dev/senior>, paste `dev-token-change-me-123` as the device
+1. Open <http://localhost:8765/dev/senior>, paste `dev-token-change-me-123` as the device
    token and click **Turn protection on**. "Protection: on" means the control channel is open.
-2. Open <http://localhost:8000/dev/caller> in a second tab and click **Call**. The browser asks
+2. Open <http://localhost:8765/dev/caller> in a second tab and click **Call**. The browser asks
    for the microphone. The senior tab shows the incoming call (masked number) and the caller
    tab hears the 425 Hz ringback tone.
 3. Click **Accept** in the senior tab (it asks for the microphone too). The ringback stops.
@@ -55,7 +60,8 @@ DEV_TOOLS=true APP_DEVICE_TOKEN=dev-token-change-me-123 uv run uvicorn app.main:
    other way round. Use headphones, otherwise two tabs on one computer feed back.
 5. Click **Hang up** in either tab; the other side shows the call as ended.
 
-With `NoopSTT` there is no transcript, so the risk bar stays at 0. The browser needs a secure
+Without `WHISPER_URL` there is no transcript, so the risk bar stays at 0; with the models
+running (see below) speak a scam script and watch the risk rise. The browser needs a secure
 context for the microphone: `http://localhost` works, a LAN IP needs HTTPS (e.g. a tunnel).
 Not accepting within 30 s ends the call (`timeout`). The caller keypad sends DTMF, which is
 used for the family-password check (`FAMILY_PASSWORD`). `/dev/caller` speaks the Twilio media
@@ -129,6 +135,12 @@ account before relying on it:
 
 ## Senior app relay (protocol v0)
 
+Connecting the HarmonyOS app (emulator) in development: run the backend on 8765, forward the
+port with `hdc rport tcp:8765 tcp:8765`, and use the same device token in the app and in
+`../.env` (`APP_DEVICE_TOKEN`, at least 16 characters, e.g. `dev-device-1-sprawdzam`; the
+shorter `dev-device-1` is rejected with 1008). The app derives the call URL from the control
+URL (`/app/control` → `/app/call/{callId}?token=…`), as in the protocol.
+
 See [`docs/APP_PROTOCOL.md`](../docs/APP_PROTOCOL.md). In short: the app keeps
 `WS /app/control` open; when a provider stream starts, the backend sends `incoming_call` with a
 one-time token (5 min); the app opens `WS /app/call/{callId}` and sends `accept`. Until then
@@ -159,19 +171,72 @@ trusted person. No accept within `APP_ACCEPT_TIMEOUT_SECONDS` (30) → `timeout`
 - `DEV_TOOLS=true` exposes `POST /dev/calls`, which admits calls without a provider signature:
   local use only.
 
-## Risk engine
+## Speech-to-text and decision model
 
-- `rules.py`: Polish and English keyword/phrase rules on normalised text (lowercase, no
-  diacritics, no punctuation; Polish stems cover inflection). Each rule belongs to a category
-  (money, secrecy, authority, urgency) as weak or strong, or adds "story" context points
-  (accident, bail, account at risk…). A category counts once. Pair bonuses make combinations
-  score far higher than single words: "pieniądze" alone ≈ 12, authority + money + secrecy ≥ 80.
-- `smoothing.py`: warning when the moving average of the last 2 readings ≥ `RISK_WARN`;
-  hang-up only when the last 2 readings are both ≥ `RISK_HANGUP`. One spike never hangs up.
-- `engine.py`: the decision model is optional. Timeout (`DECISION_TIMEOUT_SECONDS`), HTTP
-  error, malformed or out-of-range answer → structured warning `decision_fallback_to_rules`
-  and rules only. Combined score = max(model, rules). Actions only escalate:
-  none → warn → verify_family_password_then_hangup.
+Both models run natively on the Mac (see the model bench README on `feat/model-bench`:
+`server/bench/run-whisper.sh`, `server/bench/run-basal.sh`). Set in `.env`:
+`WHISPER_URL=http://127.0.0.1:8080`, `DECISION_BACKEND=basal`, `BASAL_URL=http://127.0.0.1:8000`
+(a backend in Docker uses `http://host.docker.internal:…`). At start-up the backend sends one
+warm-up request to each (the first basal decision compiles kernels, ~2 s); `/health` shows
+`models.*.warmup`.
+
+- **Segmentation** (`app/audio/segmenter.py`): the caller's 16 kHz audio is cut at pauses
+  (≥ `STT_PAUSE_SECONDS`, 0.2 s, energy VAD) into 3–8 s segments; short utterances go out after
+  a 1 s pause; silence is never sent. Whisper's latency hardly depends on segment length and
+  2 s chunks hurt accuracy. Silero VAD is the planned upgrade for noisy lines.
+- **Whisper client** (`app/stt/whisper.py`): `POST /inference` with a 16 kHz PCM16 WAV,
+  `language` forced from the call, `verbose_json`, `temperature=0.0`. Segments with
+  `no_speech_prob > 0.6` and known silence hallucinations ("KONIEC", "Napisy wykonane…",
+  "Dziękuję za uwagę", "Thank you for watching") are dropped. Timeout 3 s; errors skip the
+  segment (`stt_failed` in the log) and the call goes on.
+- **basal client** (`app/risk/basal.py`, schemas in `app/risk/schemas/`): state = the last
+  60 s of transcript with speaker tags (`Dzwoniący:` / `Caller:`; only the caller for now),
+  PL or EN schema from the call language. Every new segment asks `risk` + `scam_type`
+  (~1.1 s); the first evaluation after a reading ≥ `RISK_WARN` asks all six questions once
+  (~2 s) and caches `money`/`secrecy`/`authority`/`urgency`. Model score =
+  `100·(1 − P(low))`. Timeout 3 s; a timeout, HTTP error (incl. 422 `{"error"}`) or
+  malformed / out-of-range answer means rules only for that reading
+  (`decision_fallback_to_rules`).
+- **Keyword rules** (`app/risk/rules.py`): Polish and English phrases on normalised text,
+  including amounts written as digits (`30 tysięcy`, `200 zł`, `$500`) and six-digit codes
+  near "kod"/"BLIK"/"code". Single words score low; combinations score high.
+- **Scoring** (team decision): combined = max(model, rules). Warn at ≥ `RISK_WARN` (50) for
+  two readings in a row. Family-password check, then hang-up, at ≥ `RISK_HANGUP` (90) for two
+  readings in a row **and** (cached secrecy ≥ `SECRECY_HANGUP_MIN` (0.8) or a keyword-rule
+  hit: a secrecy phrase or a rules score ≥ `RISK_WARN`). Actions only escalate.
+  `DECISION_FULL_REFRESH_SECONDS` (default 0 = off) re-asks the six questions while the
+  hang-up gate is blocked only by an early, low secrecy answer.
+- Logs carry per-segment `stt_latency` and per-request `decision_latency` (ms), scores and
+  categories; never transcript text.
+
+### Voice prompts (local step, not committed)
+
+```bash
+cd server && scripts/make_prompts.sh      # macOS `say` (Zosia / Samantha) + ffmpeg
+```
+
+Writes `DATA_DIR/prompts/{warning,password,blocked}_{pl,en}.ulaw` (8 kHz μ-law, phone
+band-pass) from the texts in `app/prompts.py`. The audio is not committed (Apple voice
+licensing). The senior hears `warning` on the first warn; caller and senior hear `password`
+before the DTMF check (the senior hears `warning` first if there was no warn step); the caller
+hears `blocked` before a blocked call ends. While a prompt plays to one side, live audio to
+that side is muted, and prompts are paced in real time. Missing files → beep tones and a
+`voice_prompt_missing` log line; `/health` lists which prompts exist. Without
+`FAMILY_PASSWORD` there is no password prompt: a high-risk call is blocked right away.
+
+### End-to-end smoke test with the real models
+
+```bash
+cd server
+DEV_TOOLS=true APP_DEVICE_TOKEN=smoke-device-token-123456 scripts/run_dev.sh   # terminal 1
+APP_DEVICE_TOKEN=smoke-device-token-123456 uv run python scripts/smoke_call.py \
+    --audio ~/models/sprawdzam/audio/pl_scam_police_8k_ulaw.wav --lang pl     # terminal 2
+```
+
+The script plays the senior app (control + call channel, `accept`) and the caller (a WAV
+streamed in real time over `/twilio/stream`) and prints the timeline of `risk`,
+`verify_password` and `call_ended` events. Clips come from the model bench
+(`server/bench/stt/make_audio.sh`).
 
 ## Telephony cost and safety guard
 
@@ -210,10 +275,9 @@ allowlist. Until the family panel exists this is the only trusted person.
 
 ## Not done yet
 
-- whisper.cpp HTTP client, basal-1 / Clef-Flash clients, Silero VAD (an RMS gate skips silent
-  windows for now)
-- Spoken warnings and a spoken family-password prompt for the caller (TTS assets); today the
-  senior gets a tone and an in-app prompt
+- Silero VAD instead of the energy rule; Clef-Flash client
 - Transcribing the senior's side (the app audio is bridged but not analysed)
-- Per-senior language, family password and trusted contacts from the family panel
+- Threshold tuning on `scenarios/` (the evaluation agent's results)
+- Per-senior language, family password and trusted person from the senior app (no family
+  web panel is planned; today they come from `.env`)
 - Dockerfile / docker compose
