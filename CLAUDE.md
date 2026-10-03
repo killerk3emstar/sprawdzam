@@ -45,6 +45,9 @@ Kryteria Huawei: oryginalność 20%, użyteczność 20%, wykonanie techniczne 20
 | Testy połączeń w trakcie budowy | Z przeglądarki, przez nasze strony `/dev/caller` (dzwoniący, format Twilio Media Streams) i `/dev/senior` (zastępuje apkę), bez operatora i bez kosztów. Z telefonu tylko test przekierowania i demo |
 | Wdrożenie | docker compose. Na Macu modele działają natywnie (Docker na Macu nie daje kontenerom GPU), backend w kontenerze łączy się z nimi przez `host.docker.internal`. Na AWS jedna maszyna EC2 + Caddy z automatycznym HTTPS |
 | Języki | PL i EN wszędzie: UI, komunikaty głosowe, rozpoznawanie mowy, reguły, scenariusze testowe |
+| UI apki seniora | Minimalny, duży, kontrastowy: jeden duży status na ekranie głównym, pełnoekranowe połączenie przychodzące i ostrzeżenie, ustawienia schowane. Tekst od 24 pt, przyciski od 56 dp, kontrast WCAG AA (decyzja 3.10) |
+| Panel rodziny | **Pomijamy** (decyzja 3.10). Rodzina dostaje SMS i telefon do osoby zaufanej. Hasło rodzinne na razie w `.env` (`FAMILY_PASSWORD`), ewentualnie później w ustawieniach apki |
+| Funkcje HarmonyOS w apce | Notification Kit (alerty), Contacts Kit (osoba zaufana i biała lista), Call Service Kit (voipCall) po krótkim teście na emulatorze. Widżet odpuszczamy (decyzja 3.10) |
 
 ## Architektura
 
@@ -117,7 +120,7 @@ app/          React Native 0.77.1 (TypeScript)
   harmony/    kontener HarmonyOS (init-harmony) + moduły ArkTS
   android/    kontener Android + moduły Kotlin
 server/       FastAPI: webhook Twilio, WebSockety, STT, ocena ryzyka, akcje
-panel/        panel rodziny (web)
+panel/        (pominięty, decyzja 3.10)
 scenarios/    rozmowy testowe PL i EN
 deploy/       docker-compose.yml, Caddyfile
 docs/         ARCHITECTURE.md, AI_FEATURES.md
@@ -207,4 +210,4 @@ Na początku każdej sesji przeczytaj `AI_WORKFLOW.md` i dopisz nowe narzędzia 
 - Odpowiedzi mentorów Huawei: Call Service Kit i mikrofon na emulatorze, znane problemy RNOH 0.77 z API 20+, podpis .hap pod ich telefon.
 - Który numer przejdzie weryfikację (Zadarma, Twilio PL)?
 - Czy mamy konto AWS i jaki ma limit na maszyny z GPU?
-- Hasło rodzinne ustawiane w panelu rodziny? (propozycja: tak)
+- ~~Hasło rodzinne ustawiane w panelu rodziny?~~ Panel pominięty (3.10): hasło w `.env`, później może w ustawieniach apki.
