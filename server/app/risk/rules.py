@@ -110,6 +110,21 @@ RULES: tuple[Rule, ...] = (
         strength=STRONG,
         hint=OTH,
     ),
+    # Whisper writes numbers as digits: "30 tysięcy", "200 zł", "5 000 złotych", "2,5 tys."
+    _rule(
+        "pl.money.amount_digits",
+        r"\b\d+(?: \d{3})*(?: \d+)? ?"
+        r"(?:zl|zlotych|zlote|zloty|pln|tys|tysiecy|tysiace|tysiac|mln|k)\b",
+        category=M,
+        strength=WEAK,
+    ),
+    _rule(
+        "pl.money.code_digits",
+        r"\b(?:kod\w*|blik\w*)(?: [a-z]\w*){0,3} \d{3} ?\d{3}(?!\d)",
+        category=M,
+        strength=STRONG,
+        hint=B,
+    ),
     _rule("pl.money.withdraw", r"\bwyplac\w*", category=M, strength=WEAK),
     _rule("pl.money.cash", r"\bgotowk\w*", category=M, strength=WEAK),
     _rule("pl.money.money", r"\bpieni(?:adz|edz)\w*|\boszczednosc\w*", category=M, strength=WEAK),
@@ -273,6 +288,21 @@ RULES: tuple[Rule, ...] = (
         strength=STRONG,
         hint=B,
     ),
+    # Digits and currency symbols ("$500" is normalised to "usd 500", "2,000 pounds").
+    _rule(
+        "en.money.amount_digits",
+        r"\b(?:usd|gbp|eur) \d+|\b\d+(?: \d{3})*(?: \d+)? ?"
+        r"(?:usd|gbp|eur|dollars?|pounds?|euros?|bucks|grand|k)\b",
+        category=M,
+        strength=WEAK,
+    ),
+    _rule(
+        "en.money.code_digits",
+        r"\b(?:code|blik)(?: [a-z]\w*){0,3} \d{3} ?\d{3}(?!\d)",
+        category=M,
+        strength=STRONG,
+        hint=B,
+    ),
     _rule("en.money.withdraw", r"\bwithdraw\w*", category=M, strength=WEAK),
     _rule("en.money.cash", r"\bcash\b", category=M, strength=WEAK),
     _rule("en.money.money", r"\bmoney\b|\bsavings\b|\bfunds\b", category=M, strength=WEAK),
@@ -423,7 +453,9 @@ class RulesResult:
         return {c.value: self.categories.get(c, 0.0) > 0 for c in Category}
 
 
-_TRANSLATE = str.maketrans({"ł": "l", "Ł": "L", "’": "", "'": "", "`": ""})
+_TRANSLATE = str.maketrans(
+    {"ł": "l", "Ł": "L", "’": "", "'": "", "`": "", "$": " usd ", "£": " gbp ", "€": " eur "}
+)
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 

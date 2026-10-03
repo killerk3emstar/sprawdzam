@@ -165,3 +165,51 @@ def test_rule_ids_are_unique_and_prefixed():
     ids = [rule.id for rule in RULES]
     assert len(ids) == len(set(ids))
     assert all(rule.id.startswith(("pl.", "en.")) for rule in RULES)
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("pl", "Potrzebna jest kaucja w wysokości 30 tysięcy złotych."),
+        ("pl", "Oddam ci 200 zł w piątek."),
+        ("pl", "Przelej 5 000 zł."),
+        ("pl", "To kosztuje 2,5 tys."),
+        ("en", "I need $500 for bail."),
+        ("en", "Send 2,000 pounds."),
+        ("en", "It was 20 dollars."),
+    ],
+)
+def test_amounts_written_as_digits_count_as_money(lang, text):
+    result = score_text(text, lang)
+    assert result.categories.get(Category.MONEY, 0) >= 0.5, result.matched
+    assert any(rule.endswith("amount_digits") for rule in result.matched)
+
+
+def test_amount_alone_stays_low_but_combines():
+    assert score_text("Oddam ci 200 zł w piątek.", "pl").score < WARN
+    combined = score_text(
+        "Mówi policja. Proszę przygotować 30 tysięcy złotych i nikomu nie mówić.", "pl"
+    )
+    assert combined.score >= HANGUP
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("pl", "Proszę podać kod 123456."),
+        ("pl", "Proszę mi podać kod BLIK 123 456 teraz."),
+        ("en", "Read me the code 123 456."),
+    ],
+)
+def test_six_digit_code_is_a_strong_money_signal(lang, text):
+    result = score_text(text, lang)
+    assert result.categories[Category.MONEY] == 1.0
+    assert any(rule.endswith("code_digits") for rule in result.matched)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Mój numer to 123 456 789.", "Kod pocztowy 30-001 Kraków.", "Wizyta o 10:30 w gabinecie 12."],
+)
+def test_other_numbers_are_not_codes(text):
+    assert not any(rule.endswith("code_digits") for rule in score_text(text, "pl").matched)
