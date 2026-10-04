@@ -3,188 +3,183 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0b0f15">
+<meta name="theme-color" content="#F7F7F5">
 <title>Sprawdzam console</title>
 <style>
 :root {
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --bg: #0b0f15; --panel: #131a23; --panel2: #1b2430; --line: #263140; --fg: #f1f5f9; --muted: #94a3b8;
-  --dim: #64748b; --accent: #60a5fa; --ok: #34d399; --warn: #fbbf24; --bad: #f87171;
-  --caller: #fb923c; --caller-bg: rgba(251,146,60,.10); --senior: #60a5fa; --senior-bg: rgba(96,165,250,.10);
+  --font: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif;
+  --bg: #F7F7F5; --fg: #111; --muted: #6A6A66; --faint: #A3A39E; --line: #DCDCD7;
+  --bad: #C0261A; --warn: #A15C00; --ok: #1F7A3D;
 }
 * { box-sizing: border-box; }
-html { font-size: clamp(15px, 1.12vw, 24px); }
+html { font-size: clamp(14px, 1.04vw, 22px); }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
-body { font: 1rem/1.4 var(--font); display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
-button { font: inherit; color: inherit; }
-header { display: flex; align-items: center; gap: 1.5rem; padding: .9rem 1.6rem; border-bottom: 1px solid var(--line); }
-.logo { display: flex; align-items: center; gap: .7rem; }
-.logo svg { width: 2.1rem; height: 2.1rem; }
-.logo b { font-size: 1.45rem; letter-spacing: .01em; }
-.logo small { display: block; color: var(--muted); font-size: .78rem; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; }
-nav { display: flex; gap: .4rem; margin-left: 1rem; background: var(--panel); padding: .3rem; border-radius: .8rem; border: 1px solid var(--line); }
-nav button { background: none; border: 0; padding: .55rem 1.1rem; border-radius: .6rem; color: var(--muted); font-weight: 650; cursor: pointer; }
-nav button.on { background: var(--panel2); color: var(--fg); }
-.spacer { flex: 1; }
-.conn { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .85rem; font-weight: 600; }
-.conn i { width: .7rem; height: .7rem; border-radius: 50%; background: var(--dim); }
-.conn.live i { background: var(--ok); box-shadow: 0 0 0 .25rem rgba(52,211,153,.15); }
-.conn.mock i { background: var(--accent); }
-.conn.offline i { background: var(--bad); animation: blink 1s infinite; }
-.lang { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-.lang button { background: none; border: 0; padding: .35rem .8rem; color: var(--muted); font-weight: 700; font-size: .8rem; cursor: pointer; }
-.lang button.on { background: var(--panel2); color: var(--fg); }
-@keyframes blink { 50% { opacity: .3; } }
-main { min-height: 0; padding: 1.1rem 1.6rem; }
-.tab { height: 100%; min-height: 0; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 1rem; min-height: 0; }
-.ptitle { color: var(--muted); font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 .6rem; }
-
-/* Live tab */
-#live { display: grid; grid-template-columns: 1.25fr 1fr; gap: 1.1rem; }
-.leftcol { display: grid; grid-template-rows: auto 1fr; gap: 1.1rem; min-height: 0; }
-.rightcol { display: grid; grid-template-rows: auto auto 1fr; gap: 1.1rem; min-height: 0; }
-.callbar { display: flex; align-items: center; gap: 1.2rem; padding: .9rem 1.2rem; }
-.callbar .num { font: 700 1.5rem/1.1 var(--mono); letter-spacing: .02em; }
-.callbar .meta { color: var(--muted); font-size: .9rem; }
-.pill { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .8rem; border-radius: 999px; font-weight: 700; font-size: .85rem; background: var(--panel2); color: var(--muted); white-space: nowrap; }
-.pill.live { background: rgba(52,211,153,.14); color: var(--ok); }
-.pill.live::before { content: ""; width: .55rem; height: .55rem; border-radius: 50%; background: var(--ok); animation: blink 1.4s infinite; }
-.pill.blocked { background: rgba(248,113,113,.16); color: var(--bad); }
-.pill.warned { background: rgba(251,191,36,.14); color: var(--warn); }
-.pill.normal { background: rgba(52,211,153,.12); color: var(--ok); }
-.timer { font: 650 1.4rem/1 var(--mono); color: var(--muted); }
-.transcript { padding: 1rem 1.2rem; display: flex; flex-direction: column; min-height: 0; }
-.lines { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: .7rem; padding-right: .4rem; }
-.line { max-width: 88%; padding: .65rem .95rem; border-radius: .9rem; font-size: 1.22rem; line-height: 1.38; }
-.line .who { display: block; font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin-bottom: .15rem; }
-.line .who span { color: var(--dim); font-weight: 600; margin-left: .5rem; letter-spacing: 0; font-family: var(--mono); }
-.line.caller { align-self: flex-start; background: var(--caller-bg); border: 1px solid rgba(251,146,60,.35); border-top-left-radius: .25rem; }
-.line.caller .who { color: var(--caller); }
-.line.senior { align-self: flex-end; background: var(--senior-bg); border: 1px solid rgba(96,165,250,.35); border-top-right-radius: .25rem; }
-.line.senior .who { color: var(--senior); }
-.line.system { align-self: center; background: none; border: 1px dashed var(--line); color: var(--muted); font-size: .9rem; padding: .35rem .9rem; }
-.empty { margin: auto; text-align: center; color: var(--dim); font-size: 1.2rem; }
-.empty b { display: block; color: var(--muted); font-size: 1.5rem; margin-bottom: .3rem; }
-.scorecard { padding: 1rem 1.3rem; display: grid; grid-template-columns: auto 1fr; gap: .4rem 1.4rem; align-items: center; }
-.score { font: 800 6.2rem/0.9 var(--font); letter-spacing: -.04em; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: center; }
-.score.none { color: var(--ok); } .score.warn { color: var(--warn); } .score.high { color: var(--bad); }
-.score.idle { color: var(--dim); }
-.level { font-size: 1.6rem; font-weight: 800; }
-.level small { display: block; color: var(--muted); font-size: .85rem; font-weight: 600; margin-top: .2rem; }
-.chips { display: flex; flex-wrap: wrap; gap: .45rem; grid-column: 1 / -1; min-height: 2.2rem; }
-.chip { padding: .35rem .8rem; border-radius: .55rem; font-weight: 700; font-size: .95rem; background: var(--panel2); border: 1px solid var(--line); }
-.chip.type { background: rgba(248,113,113,.14); border-color: rgba(248,113,113,.45); color: #fecaca; }
-.chip.reason { color: #fde68a; border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.08); }
-.chartbox { padding: 1rem 1.2rem .6rem; }
-.chartbox svg { width: 100%; height: clamp(150px, 24vh, 300px); display: block; overflow: visible; }
-.actions { padding: 1rem 1.2rem; display: flex; flex-direction: column; min-height: 0; }
-.acts { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
-.acts li { display: grid; grid-template-columns: 3.6rem 1.9rem 1fr; align-items: center; gap: .6rem; padding: .45rem 0; border-bottom: 1px solid var(--line); font-size: 1.12rem; font-weight: 650; }
-.acts li:last-child { border-bottom: 0; }
-.acts .t { font: 600 .9rem var(--mono); color: var(--dim); }
-.acts .ic { width: 1.6rem; height: 1.6rem; border-radius: 50%; display: grid; place-items: center; font-size: .9rem; font-weight: 900; color: #0b0f15; }
-.ic.warn { background: var(--warn); } .ic.bad { background: var(--bad); } .ic.ok { background: var(--ok); } .ic.info { background: var(--accent); }
-.acts .detail { display: block; color: var(--muted); font-size: .82rem; font-weight: 500; }
-.acts .none { color: var(--dim); font-weight: 500; grid-template-columns: 1fr; border: 0; }
-
-/* Operator tab */
-#operator { display: grid; grid-template-rows: auto 1fr; gap: 1.1rem; }
-.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.1rem; }
-.tile { padding: 1rem 1.3rem; }
-.tile b { display: block; font: 800 3.2rem/1 var(--font); font-variant-numeric: tabular-nums; margin-top: .3rem; }
-.tile.warn b { color: var(--warn); } .tile.bad b { color: var(--bad); } .tile.ok b { color: var(--ok); }
-.tile span { color: var(--muted); font-weight: 650; font-size: .95rem; }
-.tablebox { padding: 1rem 1.3rem; overflow: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 1.05rem; }
-th { text-align: left; color: var(--muted); font-size: .78rem; letter-spacing: .07em; text-transform: uppercase; padding: .5rem .7rem; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
-td { padding: .7rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
-td.mono { font-family: var(--mono); white-space: nowrap; }
-td .chip { font-size: .8rem; padding: .2rem .55rem; margin: .1rem .2rem .1rem 0; display: inline-block; }
-.privacy { display: flex; align-items: center; gap: .6rem; color: var(--muted); font-size: .9rem; margin-bottom: .8rem; }
-.privacy svg { width: 1.2rem; height: 1.2rem; flex: none; }
-.bar { display: inline-block; width: 5rem; height: .5rem; border-radius: 999px; background: var(--panel2); vertical-align: middle; margin-right: .6rem; overflow: hidden; }
-.bar i { display: block; height: 100%; }
-footer { padding: .65rem 1.6rem; border-top: 1px solid var(--line); color: var(--warn); font-weight: 650; font-size: .9rem; display: flex; gap: .7rem; align-items: center; background: #0e131b; }
-footer svg { width: 1.2rem; height: 1.2rem; flex: none; }
+body { font: 1rem/1.4 var(--font); display: grid; grid-template-rows: auto 1fr auto; overflow: hidden;
+       -webkit-font-smoothing: antialiased; font-feature-settings: "tnum" 0; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+.num { font-variant-numeric: tabular-nums; }
 [hidden] { display: none !important; }
+
+/* Header: name, tabs, connection, language. */
+header { display: flex; align-items: baseline; gap: 2.4rem; padding: 1.3rem 2.4rem 1rem; border-bottom: 1px solid var(--line); }
+.brand { font-size: 1.25rem; font-weight: 700; letter-spacing: -.01em; }
+nav { display: flex; gap: 1.6rem; }
+nav button { color: var(--muted); font-size: 1rem; padding: .15rem 0; border-bottom: 2px solid transparent; }
+nav button.on { color: var(--fg); border-bottom-color: var(--fg); }
+.spacer { flex: 1; }
+.conn { color: var(--muted); font-size: .85rem; }
+.conn.offline { color: var(--bad); }
+.lang { display: flex; gap: .8rem; font-size: .85rem; }
+.lang button { color: var(--faint); }
+.lang button.on { color: var(--fg); font-weight: 600; }
+
+main { min-height: 0; padding: 1.8rem 2.4rem 1.2rem; }
+.tab { height: 100%; min-height: 0; }
+h2 { font-size: .85rem; font-weight: 500; color: var(--muted); margin: 0 0 .6rem; }
+
+/* Live tab: verdict column (score, chart, reasons, actions) and transcript column. */
+#live { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 3.2rem; }
+.verdict { display: grid; grid-template-rows: auto auto auto minmax(6rem, 1fr) auto; min-height: 0; }
+.callinfo { display: flex; align-items: baseline; gap: 1.2rem; font-size: 1.05rem; color: var(--muted); }
+.callinfo .who { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.callinfo .callstate { font-size: 1.05rem; font-weight: 400; color: var(--muted); margin-right: 1rem; letter-spacing: 0; }
+.callinfo .timer { margin-left: auto; color: var(--fg); font-size: 1.6rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.score { font-size: 11.5rem; line-height: .86; font-weight: 700; letter-spacing: -.055em; margin: 1.6rem 0 .9rem -.06em;
+         font-variant-numeric: tabular-nums; }
+.score.idle { color: var(--line); font-weight: 300; }
+.score.warn, .state.warn { color: var(--warn); }
+.score.high, .state.high { color: var(--bad); }
+.state { font-size: 1.7rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
+.state.idle { color: var(--muted); font-weight: 500; }
+.pattern { font-size: 1.15rem; color: var(--muted); margin-top: .3rem; min-height: 1.6rem; }
+.pattern b { color: var(--fg); font-weight: 600; }
+.chartbox { min-height: 0; display: flex; flex-direction: column; margin-top: 1.6rem; }
+.chartbox svg { flex: 1; min-height: 0; width: 100%; display: block; overflow: visible; }
+.chartbox svg text { font-family: var(--font); font-variant-numeric: tabular-nums; }
+.facts { display: grid; grid-template-columns: 1fr 1.7fr; gap: 2rem; border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1rem; }
+.facts ul { list-style: none; margin: 0; padding: 0; font-size: 1.1rem; line-height: 1.35; }
+.facts li + li { margin-top: .35rem; }
+.reasons li { color: var(--fg); }
+.facts .none { color: var(--faint); }
+.acts li { display: grid; grid-template-columns: 3rem 1fr; gap: .8rem; }
+.acts .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.acts .warn { color: var(--warn); } .acts .bad { color: var(--bad); } .acts .ok { color: var(--ok); }
+.acts .detail { display: block; color: var(--muted); font-size: .85rem; }
+.facts .scroll { max-height: 11.5rem; overflow-y: auto; }
+
+.transcript { border-left: 1px solid var(--line); padding-left: 3.2rem; display: flex; flex-direction: column; min-height: 0; }
+.lines { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; padding: 0 .4rem 1rem 0; scrollbar-width: none; }
+.lines::-webkit-scrollbar { display: none; }
+.line { max-width: 40em; }
+.line .who { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .2rem; }
+.line .who span { color: var(--faint); margin-left: .6rem; font-variant-numeric: tabular-nums; }
+.line p { margin: 0; font-size: 1.45rem; line-height: 1.38; letter-spacing: -.005em; }
+.line.senior { margin-left: 4.5rem; padding-left: 1.2rem; border-left: 2px solid var(--fg); }
+.line.senior p { font-weight: 500; }
+.empty { margin: .4rem 0 0; color: var(--muted); font-size: 1.4rem; }
+.empty span { display: block; color: var(--faint); font-size: 1rem; margin-top: .3rem; }
+
+/* Operator tab. */
+#operator { display: grid; grid-template-rows: auto auto 1fr; min-height: 0; }
+.totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line); padding-bottom: 1.6rem; }
+.totals div { padding-right: 2rem; }
+.totals b { display: block; font-size: 4.4rem; line-height: 1; font-weight: 700; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.totals span { display: block; color: var(--muted); font-size: 1rem; margin-top: .5rem; }
+.totals .warn b { color: var(--warn); } .totals .bad b { color: var(--bad); }
+.privacy { color: var(--muted); font-size: .95rem; margin: 1.2rem 0 .4rem; }
+.tablebox { overflow: auto; min-height: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 1.1rem; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: .85rem; padding: .7rem 1.4rem .6rem 0;
+     border-bottom: 1px solid var(--fg); position: sticky; top: 0; background: var(--bg); white-space: nowrap; }
+td { padding: .85rem 1.4rem .85rem 0; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td.tn { font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.dim { color: var(--muted); }
+td .warned { color: var(--warn); font-weight: 600; } td .blocked { color: var(--bad); font-weight: 600; }
+td .normal { color: var(--muted); }
+td.acts-cell { color: var(--muted); font-size: 1rem; }
+.noalerts { color: var(--muted); padding: 1.2rem 0; margin: 0; }
+
+footer { padding: .7rem 2.4rem .9rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
+
 @media (max-width: 1000px) {
   body { overflow: auto; height: auto; }
-  #live { grid-template-columns: 1fr; }
-  .tiles { grid-template-columns: repeat(2, 1fr); }
-  .lines { max-height: 50vh; }
+  header { flex-wrap: wrap; gap: 1rem 1.6rem; padding: 1rem; }
+  main { padding: 1rem; }
+  #live { grid-template-columns: 1fr; gap: 2rem; }
+  .verdict { grid-template-rows: auto; }
+  .chartbox { height: 220px; }
+  .transcript { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 1.2rem; }
+  .lines { max-height: 60vh; }
+  .score { font-size: 8rem; }
+  .totals { grid-template-columns: repeat(2, 1fr); gap: 1.2rem 0; }
+  .tablebox { overflow-x: auto; }
+  footer { padding: .7rem 1rem; }
 }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 </style>
 </head>
 <body>
 <header>
-  <div class="logo">
-    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 4 7v8c0 7.2 5.1 13.4 12 15 6.9-1.6 12-7.8 12-15V7z" fill="#1d4ed8"/><path d="m10.5 16 4 4 7.5-8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <div><b>Sprawdzam</b><small data-i18n="console"></small></div>
-  </div>
+  <div class="brand">Sprawdzam</div>
   <nav>
     <button type="button" data-tab="live" class="on" data-i18n="tabLive"></button>
     <button type="button" data-tab="operator" data-i18n="tabOperator"></button>
   </nav>
   <div class="spacer"></div>
-  <div class="conn" id="conn"><i></i><span id="connText"></span></div>
-  <div class="lang"><button type="button" data-lang="pl">PL</button><button type="button" data-lang="en">EN</button></div>
+  <div class="conn" id="conn"><span id="connText"></span></div>
+  <div class="lang" role="group" aria-label="Language"><button type="button" data-lang="pl">PL</button><button type="button" data-lang="en">EN</button></div>
 </header>
 
 <main>
   <section class="tab" id="live">
-    <div class="leftcol">
-      <div class="panel callbar">
-        <div><div class="num" id="callNum">—</div><div class="meta" id="callMeta"></div></div>
-        <div class="spacer"></div>
-        <span class="pill" id="callState"></span>
-        <span class="timer" id="callTimer">0:00</span>
+    <div class="verdict">
+      <div class="callinfo">
+        <span class="who" id="callNum">—</span>
+        <span id="callMeta"></span>
+        <span class="timer"><span class="callstate" id="callState"></span><span id="callTimer">0:00</span></span>
       </div>
-      <div class="panel transcript">
-        <p class="ptitle" data-i18n="transcript"></p>
-        <div class="lines" id="lines"></div>
+      <div>
+        <div class="score idle" id="score" aria-live="polite">–</div>
+        <div class="state idle" id="level"></div>
+        <div class="pattern" id="pattern"></div>
+      </div>
+      <div></div>
+      <div class="chartbox">
+        <h2 id="chartTitle"></h2>
+        <svg id="chart" role="img"></svg>
+      </div>
+      <div class="facts">
+        <div><h2 data-i18n="reasons"></h2><ul class="reasons scroll" id="chips"></ul></div>
+        <div><h2 data-i18n="actions"></h2><ul class="acts scroll" id="acts"></ul></div>
       </div>
     </div>
-    <div class="rightcol">
-      <div class="panel scorecard">
-        <div class="score idle" id="score">–</div>
-        <div class="level" id="level"></div>
-        <div class="chips" id="chips"></div>
-      </div>
-      <div class="panel chartbox">
-        <p class="ptitle" data-i18n="chart"></p>
-        <svg id="chart" viewBox="0 0 600 220" preserveAspectRatio="none" role="img"></svg>
-      </div>
-      <div class="panel actions">
-        <p class="ptitle" data-i18n="actions"></p>
-        <ul class="acts" id="acts"></ul>
-      </div>
+    <div class="transcript">
+      <h2 data-i18n="transcript"></h2>
+      <div class="lines" id="lines"></div>
     </div>
   </section>
 
   <section class="tab" id="operator" hidden>
-    <div class="tiles">
-      <div class="panel tile"><span data-i18n="tCalls"></span><b id="tCalls">0</b></div>
-      <div class="panel tile warn"><span data-i18n="tWarned"></span><b id="tWarned">0</b></div>
-      <div class="panel tile bad"><span data-i18n="tBlocked"></span><b id="tBlocked">0</b></div>
-      <div class="panel tile ok"><span data-i18n="tNormal"></span><b id="tNormal">0</b></div>
+    <div class="totals">
+      <div><b id="tCalls">0</b><span data-i18n="tCalls"></span></div>
+      <div class="warn"><b id="tWarned">0</b><span data-i18n="tWarned"></span></div>
+      <div class="bad"><b id="tBlocked">0</b><span data-i18n="tBlocked"></span></div>
+      <div><b id="tNormal">0</b><span data-i18n="tNormal"></span></div>
     </div>
-    <div class="panel tablebox">
-      <p class="privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span data-i18n="privacy"></span></p>
+    <p class="privacy" data-i18n="privacy"></p>
+    <div class="tablebox">
       <table>
-        <thead><tr><th data-i18n="cTime"></th><th data-i18n="cNumber"></th><th data-i18n="cType"></th><th data-i18n="cMax"></th><th data-i18n="cOutcome"></th><th data-i18n="cActions"></th></tr></thead>
+        <thead><tr><th data-i18n="cTime"></th><th data-i18n="cNumber"></th><th data-i18n="cType"></th><th class="n" data-i18n="cMax"></th><th data-i18n="cOutcome"></th><th data-i18n="cActions"></th></tr></thead>
         <tbody id="alerts"></tbody>
       </table>
-      <p class="empty" id="noAlerts" data-i18n="noAlerts"></p>
+      <p class="noalerts" id="noAlerts" data-i18n="noAlerts"></p>
     </div>
   </section>
 </main>
 
-<footer>
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16.5v.5"/></svg>
-  <span data-i18n="disclaimer"></span>
-</footer>
+<footer data-i18n="disclaimer"></footer>
 
 <script type="module">
 const $ = (id) => document.getElementById(id);
@@ -194,78 +189,90 @@ const MOCK = params.get("mock") === "1";
 // ---- i18n -------------------------------------------------------------------------------
 const T = {
   pl: {
-    console: "Konsola demonstracyjna", tabLive: "Na żywo", tabOperator: "Panel operatora",
-    transcript: "Transkrypcja rozmowy", chart: "Ryzyko w czasie", actions: "Działania ochrony",
+    tabLive: "Na żywo", tabOperator: "Panel operatora",
+    transcript: "Rozmowa", chart: "Ryzyko w czasie", reasons: "Powody", actions: "Działania",
     caller: "Dzwoniący", senior: "Senior",
-    waitTitle: "Czekamy na połączenie", waitSub: "Zadzwoń z symulatora sieci operatora",
-    live: "Rozmowa trwa", ended: "Zakończona",
-    lvlNone: "Brak zagrożenia", lvlWarn: "Ostrzeżenie", lvlHigh: "Wysokie ryzyko", lvlIdle: "Brak danych",
-    srcModel: "model AI + reguły", srcRules: "tylko reguły (model niedostępny)",
+    waitTitle: "Czekamy na połączenie", waitSub: "Zadzwoń z symulatora sieci operatora.",
+    live: "Rozmowa trwa", listening: "Słuchamy rozmowy…",
+    lvlNone: "Bez oznak oszustwa", lvlWarn: "Ostrzeżenie", lvlHigh: "Wysokie ryzyko", lvlIdle: "Czekamy na połączenie",
+    lvlAnalysing: "Analiza rozmowy…", stBlocked: "Rozłączono — oszustwo", stEnded: "Zakończona",
+    pattern: "Wzorzec:", srcModel: "model AI i reguły", srcRules: "tylko reguły (model niedostępny)",
     warnLine: "ostrzeżenie", hangLine: "rozłączenie",
-    noActions: "Brak działań: rozmowa wygląda normalnie",
-    connLive: "Połączono", connOff: "Brak połączenia, ponawiam…", connWait: "Łączenie…", connMock: "Tryb demo (dane symulowane)",
+    noReasons: "Brak", noActions: "Brak: rozmowa wygląda normalnie", noCall: "—",
+    connLive: "Połączono z serwerem", connOff: "Brak połączenia z serwerem, ponawiam…", connWait: "Łączenie…", connMock: "Tryb demo, dane symulowane",
     tCalls: "Przeanalizowane rozmowy", tWarned: "Ostrzeżenia", tBlocked: "Zablokowane oszustwa", tNormal: "Bez zagrożenia",
     privacy: "Operator widzi tylko metadane alertów. Treść rozmów i nagrania nie są przechowywane ani pokazywane.",
     cTime: "Czas", cNumber: "Numer", cType: "Typ oszustwa", cMax: "Maks. ryzyko", cOutcome: "Wynik", cActions: "Działania",
-    noAlerts: "Brak alertów",
+    noAlerts: "Brak alertów.",
     disclaimer: "Tryb demonstracyjny. W produkcji treść rozmów nie jest wyświetlana.",
     langPl: "polski", langEn: "angielski", unknownNo: "numer ukryty",
   },
   en: {
-    console: "Demo console", tabLive: "Live", tabOperator: "Operator console",
-    transcript: "Call transcript", chart: "Risk over time", actions: "Protection actions",
+    tabLive: "Live", tabOperator: "Operator console",
+    transcript: "Conversation", chart: "Risk over time", reasons: "Reasons", actions: "Actions",
     caller: "Caller", senior: "Senior",
-    waitTitle: "Waiting for a call", waitSub: "Call from the operator network simulator",
-    live: "In call", ended: "Ended",
-    lvlNone: "No threat", lvlWarn: "Warning", lvlHigh: "High risk", lvlIdle: "No data",
-    srcModel: "AI model + rules", srcRules: "rules only (model unavailable)",
-    warnLine: "warning", hangLine: "hang-up",
-    noActions: "No actions: the call looks normal",
-    connLive: "Connected", connOff: "Disconnected, retrying…", connWait: "Connecting…", connMock: "Demo mode (simulated data)",
+    waitTitle: "Waiting for a call", waitSub: "Call from the operator network simulator.",
+    live: "In call", listening: "Listening to the call…",
+    lvlNone: "No signs of fraud", lvlWarn: "Warning", lvlHigh: "High risk", lvlIdle: "Waiting for a call",
+    lvlAnalysing: "Analysing the call…", stBlocked: "Cut off — scam", stEnded: "Ended",
+    pattern: "Pattern:", srcModel: "AI model and rules", srcRules: "rules only (model unavailable)",
+    warnLine: "warning", hangLine: "cut-off",
+    noReasons: "None", noActions: "None: the call looks normal", noCall: "—",
+    connLive: "Connected to the server", connOff: "Server disconnected, retrying…", connWait: "Connecting…", connMock: "Demo mode, simulated data",
     tCalls: "Calls analysed", tWarned: "Warnings", tBlocked: "Scams blocked", tNormal: "No threat",
     privacy: "The operator only sees alert metadata. Call content and audio are never stored or shown.",
     cTime: "Time", cNumber: "Number", cType: "Scam type", cMax: "Max risk", cOutcome: "Outcome", cActions: "Actions",
-    noAlerts: "No alerts yet",
+    noAlerts: "No alerts yet.",
     disclaimer: "Demo mode. In production, call content is never displayed.",
     langPl: "Polish", langEn: "English", unknownNo: "hidden number",
   },
 };
 const LABELS = {
   reason: {
-    money: ["pieniądze", "money"], secrecy: ["tajemnica", "secrecy"],
-    authority: ["podszywanie się pod instytucję", "impersonating an authority"],
-    urgency: ["presja czasu", "time pressure"], rules: ["słowa kluczowe", "keywords"],
-    keywords: ["słowa kluczowe", "keywords"], blik: ["kod BLIK", "BLIK code"],
-    remote_access: ["zdalny dostęp", "remote access"], cash: ["gotówka", "cash"],
-    transfer: ["przelew", "bank transfer"], password: ["hasło", "password"],
+    money: ["Prośba o pieniądze", "Asks for money"], secrecy: ["Nakaz zachowania tajemnicy", "Demands secrecy"],
+    authority: ["Podszywanie się pod instytucję", "Impersonates an authority"],
+    urgency: ["Presja czasu", "Time pressure"], rules: ["Słowa kluczowe", "Keywords"],
+    keywords: ["Słowa kluczowe", "Keywords"], blik: ["Kod BLIK", "BLIK code"],
+    remote_access: ["Zdalny dostęp do telefonu", "Remote access"], cash: ["Gotówka", "Cash"],
+    transfer: ["Przelew", "Bank transfer"], password: ["Hasło lub kod", "Password or code"],
   },
   scam: {
     none: ["brak", "none"], grandchild: ["na wnuczka", "grandchild scam"], police: ["na policjanta", "fake police"],
     bank: ["na pracownika banku", "fake bank employee"], other: ["inne oszustwo", "other fraud"],
   },
+  // [PL, EN, tone] where tone colours the line: warn | bad | ok | "" (neutral).
   action: {
-    warn: ["Ostrzeżenie głosowe dla seniora", "Voice warning to the senior", "warn", "!"],
-    verify_password: ["Pytanie o hasło rodzinne", "Family password challenge", "info", "?"],
-    password_ok: ["Hasło rodzinne poprawne", "Family password correct", "ok", "✓"],
-    password_failed: ["Hasło rodzinne błędne", "Wrong family password", "bad", "✕"],
-    hangup: ["Rozłączenie rozmowy", "Call cut off", "bad", "✕"],
-    sms_requested: ["SMS do osoby zaufanej: wysyłanie…", "SMS to trusted person: sending…", "info", "…"],
-    sms_sent: ["SMS do osoby zaufanej wysłany ✓", "SMS to trusted person sent ✓", "ok", "✓"],
-    sms_failed: ["SMS do osoby zaufanej: błąd", "SMS to trusted person: failed", "bad", "✕"],
+    warn: ["Ostrzeżenie głosowe dla seniora", "Voice warning to the senior", "warn"],
+    verify_password: ["Pytanie o hasło rodzinne", "Family password challenge", ""],
+    password_ok: ["Hasło rodzinne poprawne", "Family password correct", "ok"],
+    password_failed: ["Hasło rodzinne błędne", "Wrong family password", "bad"],
+    confirm_block: ["Blokada za kilka sekund (brak hasła rodzinnego)", "Blocking in a few seconds (no family password)", "warn"],
+    senior_blocked: ["Senior rozłączył podejrzaną rozmowę", "The senior hung up the suspicious call", "bad"],
+    hangup: ["Rozłączenie rozmowy", "Call cut off", "bad"],
+    sms_requested: ["SMS do osoby zaufanej: wysyłanie…", "SMS to the trusted person: sending…", ""],
+    sms_sent: ["SMS do osoby zaufanej wysłany", "SMS to the trusted person sent", "ok"],
+    sms_failed: ["SMS do osoby zaufanej: błąd", "SMS to the trusted person failed", "bad"],
+    fail_open: ["Ochrona niedostępna, połączenie przepuszczone", "Protection unavailable, call let through", "warn"],
   },
   short: {
     warn: ["ostrzeżenie", "warning"], verify_password: ["hasło rodzinne", "family password"],
     password_ok: ["hasło poprawne", "password OK"], password_failed: ["złe hasło", "wrong password"],
+    confirm_block: ["blokada", "auto-block"], senior_blocked: ["rozłączył senior", "senior hung up"],
     hangup: ["rozłączenie", "cut off"], sms_requested: ["SMS", "SMS"], sms_sent: ["SMS wysłany", "SMS sent"],
-    sms_failed: ["SMS: błąd", "SMS failed"],
+    sms_failed: ["SMS: błąd", "SMS failed"], fail_open: ["przepuszczone", "let through"],
   },
   outcome: { warned: ["ostrzeżono", "warned"], blocked: ["zablokowano", "blocked"], normal: ["bez zagrożenia", "no threat"] },
   reason_end: {
     scam_blocked: ["oszustwo zablokowane", "scam blocked"], caller_hangup: ["dzwoniący się rozłączył", "caller hung up"],
     senior_hangup: ["senior się rozłączył", "senior hung up"], app_hangup: ["senior się rozłączył", "senior hung up"],
-    password_ok: ["hasło poprawne", "password correct"],
+    senior_blocked: ["senior rozłączył podejrzaną rozmowę", "senior hung up the suspicious call"],
+    password_ok: ["hasło poprawne", "password correct"], timeout: ["limit czasu", "timed out"], error: ["błąd", "error"],
   },
 };
+// Details worth showing under an action (the others are developer strings).
+const SHOW_DETAIL = new Set(["sms_sent", "sms_failed", "confirm_block", "fail_open"]);
+const BLOCK_ACTIONS = new Set(["hangup", "senior_blocked"]);
+
 let ui = "pl";
 try { ui = localStorage.getItem("juryLang") || "pl"; } catch {}
 if (!T[ui]) ui = "pl";
@@ -288,7 +295,8 @@ function newCall(m) {
 const offset = (at) => Math.max(0, ((Date.parse(at) || Date.now()) - call.start) / 1000);
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const levelOf = (score) => score >= thresholds.hangup ? "high" : score >= thresholds.warn ? "warn" : "none";
-const colorOf = (level) => ({ none: "var(--ok)", warn: "var(--warn)", high: "var(--bad)" })[level] || "var(--dim)";
+const blocked = (c) => c && (c.reason === "scam_blocked" || c.reason === "senior_blocked"
+  || c.actions.some((a) => BLOCK_ACTIONS.has(a.action)));
 
 function handle(m) {
   switch (m.type) {
@@ -318,6 +326,7 @@ function handle(m) {
       if (!ensureCall(m)) return;
       call.actions.push({ action: m.action, detail: m.detail, t: offset(m.at) });
       renderActions();
+      renderScore();
       break;
     case "call_ended":
       if (m.alert) alerts.unshift(m.alert); else endedNoAlert += 1;
@@ -349,16 +358,9 @@ function renderAll() {
 }
 
 function renderCallbar() {
-  $("callNum").textContent = call ? (call.caller || t("unknownNo")) : "—";
+  $("callNum").textContent = call ? (call.caller || t("unknownNo")) : t("noCall");
   $("callMeta").textContent = call && call.lang ? (call.lang === "pl" ? t("langPl") : t("langEn")) : "";
-  const st = $("callState");
-  if (!call) { st.className = "pill"; st.textContent = t("waitTitle"); }
-  else if (!call.ended) { st.className = "pill live"; st.textContent = t("live"); }
-  else {
-    const blocked = call.reason === "scam_blocked";
-    st.className = "pill " + (blocked ? "blocked" : "normal");
-    st.textContent = `${t("ended")}: ${L("reason_end", call.reason)}`;
-  }
+  $("callState").textContent = !call ? "" : call.ended ? t("stEnded") : t("live");
   tick();
 }
 
@@ -373,18 +375,19 @@ function renderLines(append) {
   const box = $("lines");
   if (!call || !call.lines.length) {
     box.textContent = "";
-    const e = el("div", "empty");
-    e.append(el("b", "", call ? t("live") + "…" : t("waitTitle")), el("span", "", call ? "" : t("waitSub")));
+    const e = el("div", "empty", call ? t("listening") : t("waitTitle"));
+    if (!call) e.append(el("span", "", t("waitSub")));
     box.append(e);
     return;
   }
   if (!append || box.querySelector(".empty")) box.textContent = "";
   const start = append ? box.children.length : 0;
   for (const line of call.lines.slice(start)) {
-    const d = el("div", `line ${line.speaker === "senior" ? "senior" : "caller"}`);
-    const who = el("span", "who", line.speaker === "senior" ? t("senior") : t("caller"));
+    const senior = line.speaker === "senior";
+    const d = el("div", `line ${senior ? "senior" : "caller"}`);
+    const who = el("span", "who", senior ? t("senior") : t("caller"));
     who.append(el("span", "", fmt(line.t)));
-    d.append(who, document.createTextNode(line.text));
+    d.append(who, el("p", "", line.text));
     box.append(d);
   }
   box.scrollTop = box.scrollHeight;
@@ -392,24 +395,31 @@ function renderLines(append) {
 
 function renderScore() {
   const m = call && call.last;
-  const sc = $("score"), lv = $("level"), chips = $("chips");
-  chips.textContent = "";
+  const sc = $("score"), lv = $("level"), pat = $("pattern"), list = $("chips");
+  list.textContent = "";
+  pat.textContent = "";
+  $("chartTitle").textContent = t("chart") + (m ? `, ${m.source === "rules" ? t("srcRules") : t("srcModel")}` : "");
   if (!m) {
     sc.className = "score idle"; sc.textContent = "–";
-    lv.textContent = t("lvlIdle");
-    lv.style.color = "var(--muted)";
+    lv.className = "state idle"; lv.textContent = call ? t("lvlAnalysing") : t("lvlIdle");
+    if (call && call.ended) { lv.className = "state"; lv.textContent = `${t("stEnded")}: ${L("reason_end", call.reason)}`; }
+    list.append(el("li", "none", t("noReasons")));
     return;
   }
   const level = m.level || levelOf(m.score);
-  sc.className = `score ${level}`;
+  const isBlocked = blocked(call);
+  const tone = isBlocked ? "high" : level === "none" ? "" : level;
+  sc.className = `score ${tone}`;
   sc.textContent = Math.round(m.score);
-  lv.textContent = { none: t("lvlNone"), warn: t("lvlWarn"), high: t("lvlHigh") }[level] || level;
-  lv.style.color = colorOf(level);
-  const src = el("small", "", m.source === "rules" ? t("srcRules") : t("srcModel"));
-  src.style.color = "";
-  lv.append(src);
-  if (m.scamType && m.scamType !== "none") chips.append(el("span", "chip type", L("scam", m.scamType)));
-  for (const r of m.reasons || []) chips.append(el("span", "chip reason", L("reason", r)));
+  lv.className = `state ${tone}`;
+  if (isBlocked) lv.textContent = t("stBlocked");
+  else if (call.ended) lv.textContent = `${t("stEnded")}: ${L("reason_end", call.reason)}`;
+  else lv.textContent = { none: t("lvlNone"), warn: t("lvlWarn"), high: t("lvlHigh") }[level] || level;
+  if (m.scamType && m.scamType !== "none") {
+    pat.append(document.createTextNode(t("pattern") + " "), el("b", "", L("scam", m.scamType)));
+  }
+  for (const r of m.reasons || []) list.append(el("li", "", L("reason", r)));
+  if (!list.children.length) list.append(el("li", "none", t("noReasons")));
 }
 
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -420,63 +430,55 @@ function svg(tag, attrs, text) {
   return e;
 }
 
+// Drawn in CSS pixels of the element (no stretched viewBox), redrawn on resize.
 function renderChart() {
   const c = $("chart");
   c.textContent = "";
-  const W = 600, H = 220, padL = 34, padR = 8, padT = 10, padB = 24;
+  const W = Math.max(200, c.clientWidth), H = Math.max(80, c.clientHeight);
+  c.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const fs = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const small = Math.round(fs * 0.8);
+  const padL = Math.round(fs * 2), padR = 2, padT = Math.round(fs * 0.4), padB = Math.round(fs * 1.5);
   const risks = call ? call.risks : [];
   const tMax = Math.max(60, ...risks.map((r) => r.t + 5), call && call.ended ? (call.endT || 0) : 0);
   const x = (s) => padL + (s / tMax) * (W - padL - padR);
   const y = (v) => padT + (1 - v / 100) * (H - padT - padB);
-  const defs = svg("defs", {});
-  const grad = svg("linearGradient", { id: "fill", x1: 0, y1: 0, x2: 0, y2: 1 });
-  grad.append(svg("stop", { offset: "0%", "stop-color": "#60a5fa", "stop-opacity": ".35" }),
-              svg("stop", { offset: "100%", "stop-color": "#60a5fa", "stop-opacity": "0" }));
-  defs.append(grad);
-  c.append(defs);
-  // Bands and axes.
-  c.append(svg("rect", { x: padL, y: y(100), width: W - padL - padR, height: y(thresholds.hangup) - y(100), fill: "rgba(248,113,113,.08)" }));
-  c.append(svg("rect", { x: padL, y: y(thresholds.hangup), width: W - padL - padR, height: y(thresholds.warn) - y(thresholds.hangup), fill: "rgba(251,191,36,.06)" }));
-  for (const v of [0, 50, 100]) {
-    c.append(svg("text", { x: padL - 6, y: y(v) + 4, "text-anchor": "end", fill: "#64748b", "font-size": 11 }, String(v)));
+  const muted = "#6A6A66", faint = "#A3A39E", line = "#DCDCD7";
+  for (const v of [0]) {
+    c.append(svg("text", { x: padL - fs * 0.5, y: y(v) + small * 0.35, "text-anchor": "end", fill: faint, "font-size": small }, String(v)));
   }
-  c.append(svg("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: "#263140", "stroke-width": 1 }));
-  const step = tMax > 120 ? 30 : 10;
+  c.append(svg("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: line, "stroke-width": 1 }));
+  const step = tMax > 150 ? 60 : tMax > 90 ? 30 : 10;
   for (let s = 0; s <= tMax; s += step) {
-    c.append(svg("text", { x: x(s), y: H - 6, "text-anchor": "middle", fill: "#64748b", "font-size": 11 }, `${s}s`));
+    c.append(svg("text", { x: x(s), y: H - small * 0.2, "text-anchor": s === 0 ? "start" : "middle", fill: faint, "font-size": small }, `${s} s`));
   }
-  for (const [v, label, color] of [[thresholds.warn, `${t("warnLine")} ${thresholds.warn}`, "#fbbf24"],
-                                   [thresholds.hangup, `${t("hangLine")} ${thresholds.hangup}`, "#f87171"]]) {
-    c.append(svg("line", { x1: padL, x2: W - padR, y1: y(v), y2: y(v), stroke: color, "stroke-width": 1.5, "stroke-dasharray": "6 5", opacity: .9 }));
-    c.append(svg("text", { x: W - padR - 4, y: y(v) - 5, "text-anchor": "end", fill: color, "font-size": 12, "font-weight": 700 }, label));
+  for (const [v, label, color] of [[thresholds.warn, t("warnLine"), "#A15C00"], [thresholds.hangup, t("hangLine"), "#C0261A"]]) {
+    c.append(svg("line", { x1: padL, x2: W - padR, y1: y(v), y2: y(v), stroke: color, "stroke-width": 1 }));
+    c.append(svg("text", { x: padL - fs * 0.5, y: y(v) + small * 0.35, "text-anchor": "end", fill: color, "font-size": small }, String(v)));
+    c.append(svg("text", { x: W - padR, y: y(v) - small * 0.45, "text-anchor": "end", fill: color, "font-size": small }, label));
   }
   if (!risks.length) return;
   const pts = risks.map((r) => [x(r.t), y(r.score)]);
-  const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
-  c.append(svg("path", { d: `${line} L${pts[pts.length - 1][0].toFixed(1)},${y(0)} L${pts[0][0].toFixed(1)},${y(0)} Z`, fill: "url(#fill)" }));
-  c.append(svg("path", { d: line, fill: "none", stroke: "#60a5fa", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" }));
-  risks.forEach((r, i) => {
-    const last = i === risks.length - 1;
-    c.append(svg("circle", { cx: pts[i][0], cy: pts[i][1], r: last ? 6 : 3.5, fill: colorOf(r.level || levelOf(r.score)),
-                             stroke: "#0b0f15", "stroke-width": 2 }));
-  });
+  const path = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  c.append(svg("path", { d: path, fill: "none", stroke: "#111", "stroke-width": 2.5, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  const last = pts[pts.length - 1];
+  c.append(svg("circle", { cx: last[0], cy: last[1], r: 4, fill: "#111" }));
 }
+if (window.ResizeObserver) new ResizeObserver(() => renderChart()).observe($("chart"));
 
 function renderActions() {
   const ul = $("acts");
   ul.textContent = "";
   if (!call || !call.actions.length) {
-    const li = el("li", "none", call ? t("noActions") : "");
-    ul.append(li);
+    ul.append(el("li", "none", call && call.last ? t("noActions") : t("noReasons")));
     return;
   }
   for (const a of call.actions) {
-    const meta = LABELS.action[a.action] || [a.action, a.action, "info", "•"];
+    const meta = LABELS.action[a.action] || [a.action, a.action, ""];
     const li = el("li");
-    li.append(el("span", "t", fmt(a.t)), el("span", `ic ${meta[2]}`, meta[3]));
-    const text = el("span", "", meta[ui === "pl" ? 0 : 1]);
-    if (a.detail) text.append(el("span", "detail", a.detail));
-    li.append(text);
+    const text = el("span", meta[2], meta[ui === "pl" ? 0 : 1]);
+    if (a.detail && SHOW_DETAIL.has(a.action)) text.append(el("span", "detail", a.detail));
+    li.append(el("span", "t", fmt(a.t)), text);
     ul.append(li);
   }
   ul.scrollTop = ul.scrollHeight;
@@ -494,21 +496,15 @@ function renderOperator() {
     const tr = el("tr");
     const d = new Date(a.at);
     const today = !isNaN(d) && d.toDateString() === new Date().toDateString();
-    tr.append(el("td", "mono", isNaN(d) ? "" : d.toLocaleString(ui === "pl" ? "pl-PL" : "en-GB",
+    tr.append(el("td", "tn", isNaN(d) ? "" : d.toLocaleString(ui === "pl" ? "pl-PL" : "en-GB",
       today ? { hour: "2-digit", minute: "2-digit", second: "2-digit" }
             : { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })));
-    tr.append(el("td", "mono", a.caller || t("unknownNo")));
-    tr.append(el("td", "", a.scamType && a.scamType !== "none" ? L("scam", a.scamType) : "—"));
-    const max = el("td", "mono");
-    const bar = el("span", "bar"); const fill = el("i");
-    fill.style.width = `${Math.min(100, a.maxScore || 0)}%`;
-    fill.style.background = colorOf(levelOf(a.maxScore || 0));
-    bar.append(fill); max.append(bar, document.createTextNode(String(Math.round(a.maxScore || 0))));
-    tr.append(max);
-    const out = el("td"); out.append(el("span", `pill ${a.outcome}`, L("outcome", a.outcome))); tr.append(out);
-    const acts = el("td");
-    for (const x of a.actions || []) acts.append(el("span", "chip", L("short", x)));
-    tr.append(acts);
+    tr.append(el("td", "tn", a.caller || t("unknownNo")));
+    const scam = a.scamType && a.scamType !== "none";
+    tr.append(el("td", scam ? "" : "dim", scam ? L("scam", a.scamType) : "—"));
+    tr.append(el("td", "n", String(Math.round(a.maxScore || 0))));
+    const out = el("td"); out.append(el("span", a.outcome, L("outcome", a.outcome))); tr.append(out);
+    tr.append(el("td", "acts-cell", (a.actions || []).map((x) => L("short", x)).join(", ") || "—"));
     tb.append(tr);
   }
   $("noAlerts").hidden = alerts.length > 0;
@@ -516,9 +512,13 @@ function renderOperator() {
 
 // ---- tabs / language ----------------------------------------------------------------------
 function showTab(name) {
-  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  document.querySelectorAll("nav button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.tab === name);
+    b.setAttribute("aria-pressed", String(b.dataset.tab === name));
+  });
   $("live").hidden = name !== "live";
   $("operator").hidden = name !== "operator";
+  if (name === "live") renderChart();
 }
 document.querySelectorAll("nav button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
 document.addEventListener("keydown", (e) => {
@@ -544,7 +544,7 @@ document.querySelectorAll("[data-lang]").forEach((b) => b.onclick = () => {
 let connState = MOCK ? "mock" : "wait";
 function setConn(state) {
   connState = state;
-  $("conn").className = `conn ${state === "live" ? "live" : state === "mock" ? "mock" : state === "offline" ? "offline" : ""}`;
+  $("conn").className = `conn ${state}`;
   $("connText").textContent = { live: t("connLive"), offline: t("connOff"), wait: t("connWait"), mock: t("connMock") }[state];
 }
 
@@ -604,9 +604,27 @@ const NORMAL = [
   [16.0, "risk", { score: 12, modelScore: 12, rulesScore: 0, level: "none", scamType: "none", reasons: [] }],
   [20.0, "call_ended", { reason: "caller_hangup", alert: { caller: "+48 *** *** 789", scamType: "none", maxScore: 23, outcome: "normal", actions: [] } }],
 ];
+// No family password set: the backend announces an automatic block, the senior hangs up first.
+const GRANDCHILD = [
+  [1.0, "call_started", { caller: "+48 *** *** 341", lang: "pl" }],
+  [4.0, "transcript", { speaker: "caller", text: "Babciu, to ja, Michał. Miałem wypadek samochodem, potrąciłem kobietę." }],
+  [5.0, "risk", { score: 38, modelScore: 38, rulesScore: 20, level: "none", scamType: "grandchild", reasons: ["urgency"] }],
+  [7.5, "transcript", { speaker: "senior", text: "Michałku, co się stało? Jesteś cały?" }],
+  [11.0, "transcript", { speaker: "caller", text: "Potrzebuję 30 tysięcy na kaucję, inaczej pójdę do więzienia. Przyjdzie po nie mój adwokat." }],
+  [12.0, "risk", { score: 74, modelScore: 74, rulesScore: 70, level: "warn", scamType: "grandchild", reasons: ["money", "urgency", "cash"] }],
+  [15.5, "risk", { score: 81, modelScore: 81, rulesScore: 70, level: "warn", scamType: "grandchild", reasons: ["money", "urgency", "cash"] }],
+  [15.6, "action", { action: "warn", detail: "" }],
+  [18.0, "transcript", { speaker: "caller", text: "Tylko nie mów nic mamie, bardzo cię proszę." }],
+  [19.0, "risk", { score: 92, modelScore: 92, rulesScore: 85, level: "high", scamType: "grandchild", reasons: ["money", "urgency", "cash", "secrecy"] }],
+  [22.5, "risk", { score: 95, modelScore: 95, rulesScore: 85, level: "high", scamType: "grandchild", reasons: ["money", "urgency", "cash", "secrecy"] }],
+  [22.6, "action", { action: "confirm_block", detail: "" }],
+  [25.0, "action", { action: "senior_blocked", detail: "" }],
+  [25.4, "action", { action: "sms_requested", detail: "" }],
+  [25.6, "call_ended", { reason: "senior_hangup", alert: { caller: "+48 *** *** 341", scamType: "grandchild", maxScore: 95, outcome: "blocked", actions: ["warn", "confirm_block", "senior_blocked", "sms_sent"] } }],
+  [27.0, "action", { action: "sms_sent", detail: "Kasia +48 *** *** 456" }],
+];
 
 function playScript(script, callId) {
-  const t0 = Date.now();
   let endAt = 0;
   for (const [sec, type, body] of script) {
     endAt = Math.max(endAt, sec);
@@ -617,19 +635,17 @@ function playScript(script, callId) {
       handle(m);
     }, sec * 1000);
   }
-  return new Promise((r) => setTimeout(r, endAt * 1000 + 100 + (Date.now() - t0) * 0));
+  return new Promise((r) => setTimeout(r, endAt * 1000 + 100));
 }
 
 async function runMock() {
   setConn("mock");
   handle({ type: "hello", warn: 50, hangup: 90, alerts: MOCK_ALERTS });
-  let n = 0;
-  for (;;) {
-    await playScript(POLICE, `CAmockpolice${n}`);
-    await new Promise((r) => setTimeout(r, 8000));
-    await playScript(NORMAL, `CAmocknormal${n}`);
-    await new Promise((r) => setTimeout(r, 8000));
-    n += 1;
+  const pause = () => new Promise((r) => setTimeout(r, 8000));
+  for (let n = 0; ; n += 1) {
+    await playScript(POLICE, `CAmockpolice${n}`); await pause();
+    await playScript(NORMAL, `CAmocknormal${n}`); await pause();
+    await playScript(GRANDCHILD, `CAmockgrand${n}`); await pause();
   }
 }
 
