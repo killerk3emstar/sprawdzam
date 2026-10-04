@@ -6,7 +6,8 @@ Plays both sides with Python clients:
   WAV file in real time (8 kHz mu-law WAV is sent as is; PCM WAV is converted).
 
 Prints a timeline (seconds from the stream start) of risk events, verify_password and
-call_ended, and how much prompt audio the caller received. Usage (from `server/`):
+call_ended, and how much prompt audio the caller received. `--audio` also takes the raw
+`.ulaw` clips from `make_samples.sh`. Usage (from `server/`):
 
     APP_DEVICE_TOKEN=... uv run python scripts/smoke_call.py \\
         --audio ~/models/sprawdzam/audio/pl_scam_police_8k_ulaw.wav --lang pl
@@ -40,6 +41,8 @@ SILENCE = base64.b64encode(b"\xff" * 160).decode()
 
 def read_wav_as_mulaw(path: Path) -> bytes:
     data = path.read_bytes()
+    if path.suffix == ".ulaw":
+        return data  # raw 8 kHz mu-law, as rendered by make_samples.sh
     if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
         raise SystemExit(f"{path}: not a WAV file")
     pos, fmt, audio = 12, None, None
