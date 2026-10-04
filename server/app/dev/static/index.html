@@ -112,9 +112,18 @@ function draw() {
   $("localHint").hidden = !local;
 }
 
+// The tunnel address comes from ?base=… (scripts/demo-up.sh opens the page with it) or the
+// last value typed here, so the QR code points at the phone-reachable https address.
+let savedBase = null;
+try { savedBase = localStorage.getItem("indexBase"); } catch {}
+const queryBase = new URLSearchParams(location.search).get("base");
 $("here").textContent = location.href;
-$("base").value = location.origin;
-$("base").oninput = draw;
+$("base").value = queryBase || (location.protocol === "https:" ? location.origin : savedBase) || location.origin;
+if (queryBase) { try { localStorage.setItem("indexBase", queryBase); } catch {} }
+$("base").oninput = () => {
+  try { localStorage.setItem("indexBase", $("base").value.trim()); } catch {}
+  draw();
+};
 applyLang();
 draw();
 </script>
