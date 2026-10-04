@@ -62,21 +62,50 @@ export function wsBase() {
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 }
 
+// Create (and resume) the AudioContext synchronously inside a tap/click handler: iOS Safari
+// only unlocks audio from a user gesture, and any `await` before this loses the gesture.
+// The context runs at whatever rate the device picks (44.1/48 kHz on iOS); the worklet
+// resamples to and from `targetRate` itself.
+export function unlockAudio() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new Ctx();
+  ctx.resume();
+  // A one-sample silent buffer also unlocks output on older iOS versions.
+  const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+  const node = ctx.createBufferSource();
+  node.buffer = buffer;
+  node.connect(ctx.destination);
+  node.start(0);
+  return ctx;
+}
+
+// iOS 17+: let Web Audio play with the ringer switch on silent, and pick the session type.
+export function setAudioSession(type) {
+  try { if (navigator.audioSession) navigator.audioSession.type = type; } catch {}
+}
+
 // Microphone frames at `targetRate` go to onFrame(Float32Array); play() takes samples at
 // `targetRate`. Needs a secure context (https or http://localhost) for the microphone.
 // With mic: false only playback is set up (no microphone permission needed).
-export async function startAudio({ targetRate, frameSamples, onFrame, mic = true }) {
-  if (mic && !navigator.mediaDevices) throw new Error("microphone needs https or http://localhost");
-  const ctx = new AudioContext();
+// `ctx`: an AudioContext from unlockAudio() (created in the gesture); a new one otherwise.
+// `monitor: true` adds a second playback queue (monitor()), e.g. to hear the sent clip.
+export async function startAudio({ targetRate, frameSamples, onFrame, mic = true, ctx = null,
+                                   monitor = false }) {
+  if (mic && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    throw new Error("microphone needs https or http://localhost");
+  }
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
   await ctx.audioWorklet.addModule("/dev/static/pcm-worklet.js");
   let stream = null;
   let source = null;
-  const node = new AudioWorkletNode(ctx, "pcm-bridge", {
+  const makeNode = () => new AudioWorkletNode(ctx, "pcm-bridge", {
     numberOfInputs: 1,
     numberOfOutputs: 1,
     outputChannelCount: [1],
     processorOptions: { targetRate, frameSamples },
   });
+  const node = makeNode();
+  const monitorNode = monitor ? makeNode() : null;
   if (mic) {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -86,10 +115,15 @@ export async function startAudio({ targetRate, frameSamples, onFrame, mic = true
     node.port.onmessage = (event) => onFrame(event.data);
   }
   node.connect(ctx.destination);
+  if (monitorNode) monitorNode.connect(ctx.destination);
   await ctx.resume();
   return {
+    sampleRate: ctx.sampleRate,
     play(samples) {
       node.port.postMessage({ type: "play", samples }, [samples.buffer]);
+    },
+    monitor(samples) {
+      if (monitorNode) monitorNode.port.postMessage({ type: "play", samples }, [samples.buffer]);
     },
     clear() {
       node.port.postMessage({ type: "clear" });
@@ -98,7 +132,8 @@ export async function startAudio({ targetRate, frameSamples, onFrame, mic = true
       if (stream) stream.getTracks().forEach((t) => t.stop());
       if (source) source.disconnect();
       node.disconnect();
-      await ctx.close();
+      if (monitorNode) monitorNode.disconnect();
+      if (ctx.state !== "closed") await ctx.close();
     },
   };
 }
