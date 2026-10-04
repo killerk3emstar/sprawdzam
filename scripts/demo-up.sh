@@ -92,14 +92,21 @@ URL=""
 if [[ $NEW_TUNNEL == 0 ]] && alive tunnel; then
   URL="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$STATE/tunnel.log" | head -1 || true)"
 fi
-if [[ -z "$URL" ]]; then
-  alive tunnel && kill "$(cat "$STATE/tunnel.pid")" 2>/dev/null || true
+# trycloudflare.com sometimes times out handing out a quick tunnel; cloudflared then exits,
+# so retry a few times.
+for attempt in 1 2 3; do
+  if [[ -n "$URL" ]]; then break; fi
+  if alive tunnel; then kill "$(cat "$STATE/tunnel.pid")" 2>/dev/null || true; fi
   start_bg tunnel cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765
   for _ in $(seq 1 30); do
-    URL="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$STATE/tunnel.log" | head -1 || true)"
-    [[ -n "$URL" ]] && break; sleep 1
+    URL="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$STATE/tunnel.log" 2>/dev/null | head -1 || true)"
+    if [[ -n "$URL" ]] || ! alive tunnel; then break; fi
+    sleep 1
   done
-fi
+  if [[ -z "$URL" ]]; then
+    warn "tunnel attempt $attempt failed: $(tail -1 "$STATE/tunnel.log" 2>/dev/null | cut -c1-120)"
+  fi
+done
 if [[ -z "$URL" ]]; then
   warn "no tunnel address (log: $STATE/tunnel.log). Fallback: run the caller page on this Mac."
 else
@@ -111,7 +118,7 @@ else
     [[ -n "$ip" ]] && code="$(curl -s -m 5 -o /dev/null -w '%{http_code}' --resolve "$host:443:$ip" "$URL/health" || true)"
     [[ "$code" == 200 ]] && break; sleep 1
   done
-  [[ "$code" == 200 ]] && ok "$URL" || warn "$URL does not answer yet (HTTP $code); give it a minute"
+  if [[ "$code" == 200 ]]; then ok "$URL"; else warn "$URL does not answer yet (HTTP $code); give it a minute"; fi
 fi
 
 say "5/5 Pages"
