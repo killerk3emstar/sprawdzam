@@ -22,6 +22,7 @@ class CallSession(
     private val url: String,
     private val client: OkHttpClient,
     private val listener: Listener,
+    context: android.content.Context,
 ) {
   interface Listener {
     fun onRinging(callId: String)
@@ -36,7 +37,7 @@ class CallSession(
   @Volatile var state = State.CONNECTING
     private set
   private var ws: WebSocket? = null
-  private val voice = VoiceAudio()
+  private val voice = VoiceAudio(context)
   private val main = Handler(Looper.getMainLooper())
   private var hangupTimer: Runnable? = null
 

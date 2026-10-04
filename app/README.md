@@ -128,6 +128,26 @@ npm run android                  # build, install and launch on a running emulat
 
 No keystore is committed. Debug builds use the Android Gradle Plugin default `~/.android/debug.keystore`.
 
+### Demo build on a phone (no Metro)
+
+```bash
+app/scripts/install-demo-android.sh --serial <adb serial>            # backend on the Mac via adb reverse :8765
+app/scripts/install-demo-android.sh --no-build --url https://xyz.trycloudflare.com   # backend through a tunnel
+```
+
+Builds `assembleRelease` (JS bundled with Hermes, signed with the local debug key, arm64-v8a), installs, grants
+microphone and notifications, allows the full-screen incoming call (`appops USE_FULL_SCREEN_INTENT`), runs
+`adb reverse tcp:8765 tcp:8765` and starts the app. The backend address can also be changed with
+`adb shell am start -a android.intent.action.VIEW -d "'sprawdzam://config?url=https://xyz.trycloudflare.com'" pl.sprawdzam.app`
+or typed in Settings (a pasted `https://host` becomes `wss://host/app/control`). Release builds allow cleartext
+`ws://` only to `localhost`/`127.0.0.1`/`10.0.2.2` (`res/xml/network_security_config.xml`).
+
+Android-only behaviour: a foreground service (`ProtectionService`, ongoing "ochrona włączona" notification) keeps
+the control channel alive in the background; an incoming call shows full-screen over the lock screen; call audio
+runs in communication mode on the loudspeaker with the platform echo canceller and noise suppressor when the
+device has them; the `alert_trusted` extension sends an SMS to the trusted person from the senior's phone
+(`docs/APP_PROTOCOL_EXTENSIONS.md`). `tools/fake_backend.py --alert-trusted` exercises it.
+
 ## Screens
 
 Minimal, large, high-contrast UI for seniors (team decision): body text ≥ 24 pt, touch targets ≥ 72 dp, WCAG AA contrast (ratios in `src/theme.ts`), few words, all strings in PL and EN in `src/i18n.tsx`. Pure React Native components.

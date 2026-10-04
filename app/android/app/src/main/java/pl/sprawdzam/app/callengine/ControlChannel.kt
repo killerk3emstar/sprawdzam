@@ -20,6 +20,8 @@ class ControlChannel(private val client: OkHttpClient, private val listener: Lis
     fun onControlOpen()
     fun onIncomingCall(callId: String, caller: String, lang: String, callUrl: String)
     fun onProtectionStatus(available: Boolean, connected: Boolean)
+    /** Protocol extension `alert_trusted`: text the trusted person from this phone. */
+    fun onAlertTrusted(callId: String, scamType: String, reasons: List<String>, text: String)
     fun onError(code: String, message: String)
   }
 
@@ -32,6 +34,8 @@ class ControlChannel(private val client: OkHttpClient, private val listener: Lis
   private var serverAvailable = false
   private var attempt = 0
   private var generation = 0
+  /** Messages that must not be lost while reconnecting (e.g. alert_trusted_result), flushed on open. */
+  private val outbox = ArrayDeque<String>()
   private val ping = object : Runnable {
     override fun run() {
       sendText(JSONObject().put("type", "ping").toString())
@@ -59,6 +63,14 @@ class ControlChannel(private val client: OkHttpClient, private val listener: Lis
     return socket.send(text)
   }
 
+  /** Sends now, or queues until the next (re)connect. Main thread or any thread. */
+  fun sendReliably(text: String) = main.post {
+    if (!sendText(text)) {
+      outbox.addLast(text)
+      while (outbox.size > 20) outbox.removeFirst()
+    }
+  }
+
   private fun disconnectNow() {
     wanted = false
     main.removeCallbacks(reconnect)
@@ -79,6 +91,7 @@ class ControlChannel(private val client: OkHttpClient, private val listener: Lis
         main.removeCallbacks(ping)
         main.postDelayed(ping, PING_INTERVAL_MS)
         listener.onControlOpen()
+        while (outbox.isNotEmpty() && sendText(outbox.first())) outbox.removeFirst()
       }.let {}
 
       override fun onMessage(webSocket: WebSocket, text: String) = main.post {
@@ -114,6 +127,19 @@ class ControlChannel(private val client: OkHttpClient, private val listener: Lis
             Protocol.callUrlFromControlUrl(url, callId, token))
       }
       "protection_status" -> setStatus(connected, msg.optBoolean("available", false))
+      "alert_trusted" -> {
+        val callId = msg.optString("callId")
+        if (callId.isEmpty()) {
+          listener.onError("protocol", "alert_trusted without callId")
+          return
+        }
+        val reasons = msg.optJSONArray("reasons")
+        listener.onAlertTrusted(
+            callId,
+            msg.optString("scamType", "other"),
+            List(reasons?.length() ?: 0) { reasons!!.optString(it) },
+            msg.optString("text", ""))
+      }
       else -> Unit // pong and unknown types
     }
   }

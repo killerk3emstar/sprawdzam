@@ -36,7 +36,7 @@ const pl = {
   enterAgain: 'Wpisz ponownie',
   hangup: 'Rozłącz',
   ended_scam_blocked_title: 'Rozłączyliśmy podejrzaną rozmowę',
-  ended_scam_blocked_text: 'Powiadomiliśmy osobę zaufaną.',
+  ended_scam_blocked_text: 'Nie oddzwaniaj na ten numer. Nie podawaj pieniędzy ani kodów.',
   ended_caller_hangup: 'Rozmówca się rozłączył',
   ended_senior_hangup: 'Rozmowa zakończona',
   ended_timeout: 'Nieodebrane połączenie',
@@ -64,6 +64,14 @@ const pl = {
   saved: 'Zapisano',
   failed: 'Nie udało się',
   micDenied: 'Brak dostępu do mikrofonu',
+  smsSent: 'Wysłano SMS do: {name} ✓',
+  smsNoPermission: 'Nie wysłano SMS: brak zgody na wysyłanie SMS',
+  smsNoNumber: 'Nie wysłano SMS: nie wybrano osoby zaufanej',
+  smsFailed: 'Nie udało się wysłać SMS do: {name}',
+  smsPermissionTitle: 'Zgoda na SMS',
+  smsPermissionText: 'Sprawdzam wyśle SMS do osoby zaufanej, gdy wykryje oszustwo.',
+  smsPermissionOn: 'SMS do osoby zaufanej: włączone',
+  smsPermissionOff: 'Zezwól na SMS do osoby zaufanej',
 };
 
 export type StringKey = keyof typeof pl;
@@ -96,7 +104,7 @@ const en: Record<StringKey, string> = {
   enterAgain: 'Enter again',
   hangup: 'Hang up',
   ended_scam_blocked_title: 'We ended a suspicious call',
-  ended_scam_blocked_text: 'Your trusted person has been informed.',
+  ended_scam_blocked_text: 'Do not call this number back. Do not give money or codes.',
   ended_caller_hangup: 'The caller hung up',
   ended_senior_hangup: 'Call ended',
   ended_timeout: 'Missed call',
@@ -124,6 +132,14 @@ const en: Record<StringKey, string> = {
   saved: 'Saved',
   failed: 'Failed',
   micDenied: 'No microphone access',
+  smsSent: 'Text message sent to: {name} ✓',
+  smsNoPermission: 'No text message sent: SMS permission is off',
+  smsNoNumber: 'No text message sent: no trusted person chosen',
+  smsFailed: 'Could not send the text message to: {name}',
+  smsPermissionTitle: 'SMS permission',
+  smsPermissionText: 'Sprawdzam texts your trusted person when it detects a scam.',
+  smsPermissionOn: 'Text to trusted person: on',
+  smsPermissionOff: 'Allow texting the trusted person',
 };
 
 export const STRINGS: Record<Lang, Record<StringKey, string>> = {pl, en};

@@ -23,6 +23,8 @@ object Protocol {
   const val EVENT_CALL_ENDED = "CallEngine.onCallEnded"
   const val EVENT_PROTECTION_STATUS = "CallEngine.onProtectionStatus"
   const val EVENT_ERROR = "CallEngine.onError"
+  /** Android only (protocol extension alert_trusted): result of the SMS to the trusted person. */
+  const val EVENT_TRUSTED_ALERT = "CallEngine.onTrustedAlert"
 
   private val DTMF = Regex("^[0-9*#]{1,32}$")
 

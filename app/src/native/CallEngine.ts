@@ -46,6 +46,15 @@ export type ProtectionStatus = {
 
 export type CallEngineError = {code: string; message: string};
 
+/** Android only (protocol extension alert_trusted): SMS to the trusted person sent from this phone. */
+export type TrustedAlert = {
+  callId: string;
+  sent: boolean;
+  error: 'no_permission' | 'no_number' | 'send_failed' | string | null;
+  /** Trusted person's name from settings (display only). */
+  name: string;
+};
+
 export type CallEngineEvents = {
   incomingCall: IncomingCall;
   callActive: CallActive;
@@ -53,6 +62,7 @@ export type CallEngineEvents = {
   verifyPassword: VerifyPasswordRequest;
   callEnded: CallEnded;
   protectionStatus: ProtectionStatus;
+  trustedAlert: TrustedAlert;
   error: CallEngineError;
 };
 
@@ -63,6 +73,7 @@ export const CALL_ENGINE_EVENT_NAMES: {[K in keyof CallEngineEvents]: string} = 
   verifyPassword: 'CallEngine.onVerifyPassword',
   callEnded: 'CallEngine.onCallEnded',
   protectionStatus: 'CallEngine.onProtectionStatus',
+  trustedAlert: 'CallEngine.onTrustedAlert',
   error: 'CallEngine.onError',
 };
 
