@@ -18,7 +18,7 @@ import kotlin.concurrent.thread
 
 /**
  * Full-duplex call audio: AudioRecord (VOICE_COMMUNICATION, 16 kHz mono PCM16) -> 20 ms frames -> onFrame;
- * frames from the call socket -> bounded jitter queue (60 ms prebuffer, 200 ms cap) -> AudioTrack
+ * frames from the call socket -> jitter queue (60 ms prebuffer; above 300 ms quiet frames are skipped to catch up; 3 s hard cap) -> AudioTrack
  * (USAGE_VOICE_COMMUNICATION). Same behaviour as the HarmonyOS VoiceAudio.
  *
  * Speakerphone: the senior's phone usually lies on the table next to the caller's, so the call runs in
@@ -42,9 +42,10 @@ class VoiceAudio(context: Context) {
   private var framesOut = 0
   private var framesIn = 0
   private var dropped = 0
+  private var skipped = 0
 
   val stats: String
-    get() = "framesOut=$framesOut framesIn=$framesIn dropped=$dropped"
+    get() = "framesOut=$framesOut framesIn=$framesIn skippedQuiet=$skipped dropped=$dropped"
 
   /** Requires RECORD_AUDIO (checked by the module before accept). */
   @SuppressLint("MissingPermission")
@@ -99,14 +100,23 @@ class VoiceAudio(context: Context) {
       }
     }
     thread(name = "sprawdzam-playback") {
-      val silence = ByteArray(Protocol.FRAME_BYTES)
+      // Short silence chunks while waiting for audio, so an underrun adds at most ~5 ms of extra latency
+      // (a whole 20 ms silence frame per underrun made the queue overflow and drop audio on bursty input).
+      val silence = ByteArray(SILENCE_BYTES)
       while (running) {
         val next = synchronized(lock) {
           if (buffering && queuedBytes < PREBUFFER_BYTES) {
             null
           } else {
             buffering = false
-            val f = queue.pollFirst()
+            var f = queue.pollFirst()
+            // Behind by more than the target latency (bursty network or a voice prompt pushed faster than
+            // real time): catch up by skipping quiet frames only, so no speech is lost.
+            while (f != null && queuedBytes - f.size > TARGET_QUEUED_BYTES && isQuiet(f)) {
+              queuedBytes -= f.size
+              skipped++
+              f = queue.pollFirst()
+            }
             if (f == null) {
               buffering = true
             } else {
@@ -121,7 +131,7 @@ class VoiceAudio(context: Context) {
     Log.i(TAG, "audio started")
   }
 
-  /** Queues one frame of caller audio for playback (drops the oldest beyond 200 ms). */
+  /** Queues one frame of caller audio for playback (drops the oldest beyond 3 s). */
   fun play(frame: ByteArray) {
     synchronized(lock) {
       framesIn++
@@ -152,6 +162,16 @@ class VoiceAudio(context: Context) {
       buffering = true
     }
     Log.i(TAG, "audio stopped ($stats)")
+  }
+
+  private fun isQuiet(frame: ByteArray): Boolean {
+    var i = 0
+    while (i + 1 < frame.size) {
+      val v = (frame[i].toInt() and 0xFF) or (frame[i + 1].toInt() shl 8)
+      if (v > QUIET_PEAK || v < -QUIET_PEAK) return false
+      i += 2
+    }
+    return true
   }
 
   private fun enterCommunicationMode() {
@@ -209,6 +229,9 @@ class VoiceAudio(context: Context) {
   companion object {
     private const val TAG = "CallEngine"
     private const val PREBUFFER_BYTES = Protocol.FRAME_BYTES * 3
-    private const val MAX_QUEUED_BYTES = Protocol.FRAME_BYTES * 10
+    private const val TARGET_QUEUED_BYTES = Protocol.FRAME_BYTES * 15 // 300 ms
+    private const val MAX_QUEUED_BYTES = Protocol.FRAME_BYTES * 150 // 3 s hard cap
+    private const val QUIET_PEAK = 600 // PCM16 peak below which a frame counts as silence
+    private const val SILENCE_BYTES = 160 // 5 ms
   }
 }

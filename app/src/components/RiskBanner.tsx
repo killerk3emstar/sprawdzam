@@ -34,7 +34,7 @@ export function RiskBanner({risk, compact}: {risk: RiskUpdate | null; compact?: 
       {reasons.length > 0 ? (
         <Text
           style={[styles.reasons, compact ? styles.reasonsCompact : null, {color: high ? colors.onRed : colors.onAmber}]}
-          numberOfLines={compact ? 4 : undefined}
+          numberOfLines={compact ? 2 : undefined}
           testID="risk-reasons">
           {reasons.join(' · ')}
         </Text>
