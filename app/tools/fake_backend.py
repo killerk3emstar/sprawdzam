@@ -31,6 +31,7 @@ TOKEN_TTL_S = 300
 ACCEPT_TIMEOUT_S = 30
 PASSWORD_TIMEOUT_S = 20
 CALLS: dict[str, dict] = {}  # callId -> {"token", "created", "used", "ended"}
+CONTROLS: set = set()  # open control sockets (for alert_trusted)
 ARGS: argparse.Namespace
 
 
@@ -44,6 +45,7 @@ async def control(ws, device_token):
         await ws.close(1008, "bad device token")
         return
     log("control: connected")
+    CONTROLS.add(ws)
     await ws.send(json.dumps({"type": "protection_status", "available": True}))
 
     async def announce():
@@ -77,13 +79,33 @@ async def control(ws, device_token):
                 tp = msg.get("trustedPerson") or {}
                 log(f"control: <- settings lang={msg.get('lang')} trustedPerson={'set' if tp.get('number') else 'none'}"
                     f" whitelist={len(msg.get('whitelist') or [])} numbers")
+            elif msg.get("type") == "alert_trusted_result":
+                log(f"control: <- alert_trusted_result callId={msg.get('callId')} sent={msg.get('sent')}"
+                    f" error={msg.get('error')}")
             else:
                 log("control: <-", msg.get("type"))
     except Exception as e:  # connection closed by the app
         log("control: closed", type(e).__name__)
     finally:
+        CONTROLS.discard(ws)
         if task:
             task.cancel()
+
+
+async def alert_trusted(call_id):
+    """Protocol extension: ask the app to text the trusted person (sent twice to exercise app-side dedupe)."""
+    msg = {"type": "alert_trusted", "callId": call_id, "scamType": "police", "reasons": ["authority", "money"],
+           "lang": ARGS.lang,
+           "text": "TEST Sprawdzam: babcia mogla rozmawiac z oszustem (falszywy policjant, prosba o gotowke). "
+                   "Zadzwon do niej."}
+    for _ in range(2):
+        for c in list(CONTROLS):
+            log("control: -> alert_trusted", call_id)
+            try:
+                await c.send(json.dumps(msg))
+            except Exception:
+                pass
+        await asyncio.sleep(1)
 
 
 async def call(ws, call_id, token):
@@ -107,6 +129,8 @@ async def call(ws, call_id, token):
         state["ended"] = True
         info["ended"] = True
         log(f"call {call_id}: -> call_ended {reason}")
+        if reason == "scam_blocked" and ARGS.alert_trusted:
+            asyncio.create_task(alert_trusted(call_id))
         try:
             await ws.send(json.dumps({"type": "call_ended", "reason": reason}))
             await ws.close(1000)
@@ -230,5 +254,7 @@ if __name__ == "__main__":
     p.add_argument("--caller-hangup", type=float, default=0, help="caller hangs up N s after accept; 0 = never")
     p.add_argument("--idle", type=float, default=CONTROL_IDLE_S, help="control idle close (4000) after N s")
     p.add_argument("--lang", default="pl")
+    p.add_argument("--alert-trusted", action="store_true",
+                   help="after scam_blocked send alert_trusted (twice) on the control channel")
     ARGS = p.parse_args()
     asyncio.run(main())

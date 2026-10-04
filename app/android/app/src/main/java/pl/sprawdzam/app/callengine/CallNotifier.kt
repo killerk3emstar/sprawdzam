@@ -121,7 +121,8 @@ class CallNotifier(private val context: Context) {
       publish(
           ID_RESULT,
           t("Rozłączyliśmy podejrzaną rozmowę", "We ended a suspicious call"),
-          t("Powiadomiliśmy osobę zaufaną.", "Your trusted person has been informed."))
+          t("Nie oddzwaniaj na ten numer. Nie podawaj pieniędzy ani kodów.",
+              "Do not call this number back. Do not give money or codes."))
     }
   }
 

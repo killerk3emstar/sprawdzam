@@ -7,7 +7,7 @@
  * @format
  */
 
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Linking, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {DevCallPanel} from './src/DevCallPanel';
 import {parseConfigLink} from './src/deepLink';
@@ -32,27 +32,10 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
   const [whitelistCount, setWhitelistCount] = useState<number | null>(null);
   const [smsAllowed, setSmsAllowed] = useState<boolean | null>(null);
   const {call} = engine;
-  const idle = call.phase === 'idle';
 
   const askSms = useCallback(() => {
     requestSmsPermission().then(setSmsAllowed);
   }, []);
-
-  // SMS to the trusted person: ask at start when a trusted person exists (never in the middle of a call).
-  const hasTrusted = !!settings.trustedPerson;
-  useEffect(() => {
-    if (!smsSupported) {
-      return;
-    }
-    hasSmsPermission().then(ok => {
-      setSmsAllowed(ok);
-      if (!ok && hasTrusted && idle && settings.notificationsAsked) {
-        askSms();
-      }
-    });
-    // Only on start and when the trusted person changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasTrusted, settings.notificationsAsked]);
 
   useEffect(() => {
     if (engine.available) {
@@ -83,13 +66,29 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
     CallEngine.requestNotificationPermission().then(setNotificationsEnabled, () => setNotificationsEnabled(false));
   }, [engine.available]);
 
-  // Ask for notifications once, on the first start.
+  // Permissions at start, one dialog after another, so nothing is asked in the middle of a call:
+  // notifications (first start only), microphone (call audio), SMS (only when a trusted person is set).
+  const startupAsked = useRef(false);
   useEffect(() => {
-    if (engine.available && !settings.notificationsAsked) {
-      onSettingsChange({...settings, notificationsAsked: true});
-      requestNotifications();
+    if (!engine.available || startupAsked.current || call.phase !== 'idle') {
+      return;
     }
-  }, [engine.available, settings, onSettingsChange, requestNotifications]);
+    startupAsked.current = true;
+    const first = !settings.notificationsAsked;
+    if (first) {
+      onSettingsChange({...settings, notificationsAsked: true});
+    }
+    (async () => {
+      if (first) {
+        setNotificationsEnabled(await CallEngine.requestNotificationPermission().catch(() => false));
+      }
+      await CallEngine.requestMicrophonePermission().catch(() => false);
+      if (smsSupported) {
+        const ok = await hasSmsPermission();
+        setSmsAllowed(ok || (settings.trustedPerson ? await requestSmsPermission() : false));
+      }
+    })();
+  }, [engine.available, call.phase, settings, onSettingsChange]);
 
   if (route !== 'dev') {
     if (call.phase === 'ringing' || call.phase === 'connecting') {
