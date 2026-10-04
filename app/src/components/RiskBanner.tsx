@@ -31,8 +31,13 @@ export function RiskBanner({risk, compact}: {risk: RiskUpdate | null; compact?: 
       <Text style={[styles.title, compact ? styles.titleCompact : null, {color: high ? colors.onRed : colors.onAmber}]}>
         {high ? t(compact ? 'riskHighShort' : 'riskHigh') : t('riskWarn')}
       </Text>
-      {reasons.length > 0 && !compact ? (
-        <Text style={[styles.reasons, {color: high ? colors.onRed : colors.onAmber}]}>{reasons.join(' · ')}</Text>
+      {reasons.length > 0 ? (
+        <Text
+          style={[styles.reasons, compact ? styles.reasonsCompact : null, {color: high ? colors.onRed : colors.onAmber}]}
+          numberOfLines={compact ? 2 : undefined}
+          testID="risk-reasons">
+          {reasons.join(' · ')}
+        </Text>
       ) : null}
     </View>
   );
@@ -48,4 +53,5 @@ const styles = StyleSheet.create({
   compact: {marginTop: 12, padding: 12},
   titleCompact: {fontSize: font.body},
   reasons: {fontSize: font.body, marginTop: 8},
+  reasonsCompact: {marginTop: 4},
 });
