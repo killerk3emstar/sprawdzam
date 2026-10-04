@@ -60,11 +60,13 @@ fi
 # Backend on the Mac (127.0.0.1:8765) reachable as localhost:8765 on the phone.
 "${ADB[@]}" reverse tcp:8765 tcp:8765
 
-"${ADB[@]}" shell am start -n "$PKG/.MainActivity" >/dev/null
+"${ADB[@]}" shell am force-stop "$PKG"
 if [[ -n "$URL" ]]; then
-  sleep 2
+  # Cold start with the config link (read by Linking.getInitialURL); the URL is stored in the app settings.
   "${ADB[@]}" shell am start -a android.intent.action.VIEW -d "'sprawdzam://config?url=$URL'" "$PKG" >/dev/null
   echo "Backend set to $URL"
+else
+  "${ADB[@]}" shell am start -n "$PKG/.MainActivity" >/dev/null
 fi
 echo "Done. The home screen should turn green (\"Jesteś chroniony\") within a few seconds."
 echo "Logs: ${ADB[*]} logcat -s CallEngine"
