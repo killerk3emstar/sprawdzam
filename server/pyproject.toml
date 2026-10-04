@@ -39,6 +39,8 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Standalone model-bench scripts (run with `uv run <script>`), not part of the backend.
+extend-exclude = ["bench"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "S", "SIM"]

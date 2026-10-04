@@ -1,7 +1,8 @@
 # App protocol v0 (backend ⇄ senior app)
 
 Status: **v0** (+ `settings`, `settings_ack`, `incoming_call.trusted`, trusted-person alert
-`alert_trusted` / `alert_trusted_result` in section 3), implemented by the
+`alert_trusted` / `alert_trusted_result` in section 3, `verify_password.timeoutSeconds`,
+`confirm_block` and the high-risk meaning of `hangup` in section 2), implemented by the
 backend in `server/app/relay/`. The senior app (React Native,
 HarmonyOS + Android) and the browser stand-in `/dev/senior` implement the client side.
 Changes to this document must be agreed by both sides.
@@ -23,7 +24,7 @@ caller ─► provider (Twilio) ─► backend ──control──► app: incom
 caller hears ringback ............... ◄──call──── {"type":"accept"}
 caller audio  ═══════════════════════ call ═════► app speaker   (PCM16 16 kHz)
 caller ◄═════ senior audio ══════════ call ◄═════ app microphone (PCM16 16 kHz)
-                                       ──call───► risk events, verify_password, call_ended
+                                       ──call───► risk, verify_password / confirm_block, call_ended
 ```
 
 General rules for both channels:
@@ -144,13 +145,29 @@ After every risk assessment (roughly every 3–4 s while the caller speaks). `sc
 plays a short warning tone into the call channel audio.
 
 ```json
-{"type": "verify_password"}
+{"type": "verify_password", "timeoutSeconds": 12}
 ```
-Risk is high. The app shows: "Ask the caller for the family password". The password can be
-entered on the senior's keypad (`dtmf` below) or by the caller on their phone keypad. If the
-correct password does not arrive within **20 s** (backend setting), or no family password is
-configured, the backend blocks the call (`call_ended` with `scam_blocked`). A correct password
-lets the call continue; there is no second check in the same call.
+Risk is high and a family password is configured. The app shows: "Ask the caller for the
+family password" with a countdown of `timeoutSeconds` (integer, counted from this message;
+backend setting `PASSWORD_TIMEOUT_SECONDS`, default 12, stretched so the caller has at least a
+few seconds after hearing the spoken request). The password can be entered on the senior's
+keypad (`dtmf` below) or by the caller on their phone keypad. If the correct password does not
+arrive in time, the caller hears "this call has been ended by the protection service" and the
+call ends with `call_ended` / `scam_blocked` (so `call_ended` arrives a few seconds after the
+countdown reaches 0). A correct password lets the call continue (no further message; the
+countdown should just disappear on the next `risk` event or after `timeoutSeconds`); there is
+no second check in the same call.
+
+```json
+{"type": "confirm_block", "seconds": 8}
+```
+Risk is high and **no family password is configured**. Sent instead of `verify_password`.
+The app shows: "This looks like a scam. We will end the call in `seconds` s" with a countdown
+and a big "End call now" button (sends `hangup`). The senior hears the spoken warning if it
+was not played yet. When the countdown runs out (backend setting `AUTO_BLOCK_SECONDS`,
+default 8, integer, counted from this message), the caller hears the blocked notice and the
+call ends with `call_ended` / `scam_blocked`, followed by `alert_trusted` (section 3). There is
+no "continue the call" answer in v0.
 
 ```json
 {"type": "call_ended", "reason": "scam_blocked"}
@@ -172,7 +189,17 @@ Without `accept` within **30 s** the call ends with `timeout`.
 {"type": "hangup"}
 ```
 The senior ends the call, or rejects it while ringing. The backend answers with `call_ended`
-(`senior_hangup`) and closes the socket.
+and closes the socket. The reason depends on the risk:
+
+- **High risk** (a `verify_password` or `confirm_block` is pending, or the decision model's
+  own score has been at or above the hang-up threshold for two readings in a row, even if
+  the app only saw `"level": "warn"`): `call_ended` / **`scam_blocked`**. The senior hanging up
+  counts as blocking the scam: the trusted person is alerted (`alert_trusted`, section 3) and
+  the operator console shows the call as blocked.
+- Otherwise (ringing, no risk, or a warning only): `call_ended` / `senior_hangup`, no alert.
+
+The app does not need to know which case applies: send `hangup` and show the result from
+`call_ended.reason`.
 
 ```json
 {"type": "dtmf", "digits": "1234"}
@@ -247,11 +274,21 @@ be ⇄ app  binary audio frames (640 bytes, 20 ms)
 be  → {"type":"risk","score":18,"level":"none","scamType":"none","reasons":["money"]}
 be  → {"type":"risk","score":64,"level":"warn","scamType":"police","reasons":["authority","money"]}
 be  → {"type":"risk","score":93,"level":"high","scamType":"police","reasons":["authority","money","secrecy"]}
-be  → {"type":"verify_password"}
-      … 20 s without the correct password …
+be  → {"type":"verify_password","timeoutSeconds":12}
+      … 12 s without the correct password, the caller hears the blocked notice …
 be  → {"type":"call_ended","reason":"scam_blocked"}       (socket closed, 1000)
 be  → {"type":"alert_trusted","callId":"CA9f…","scamType":"police",…,"text":"Sprawdzam: …"}   (control)
 app → {"type":"alert_trusted_result","callId":"CA9f…","sent":true}                          (control)
+```
+
+Without a family password the high-risk part becomes:
+
+```
+be  → {"type":"risk","score":93,"level":"high","scamType":"police","reasons":["authority","money","secrecy"]}
+be  → {"type":"confirm_block","seconds":8}
+app → {"type":"hangup"}                                    (optional: senior ends it at once)
+be  → {"type":"call_ended","reason":"scam_blocked"}       (after the hang-up, or 8 s + notice)
+be  → {"type":"alert_trusted",…}                                                           (control)
 ```
 
 ## 6. Security notes

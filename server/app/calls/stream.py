@@ -265,7 +265,8 @@ class StreamHandler:
             provider_out=self.out,
             hub=services.hub,
             accept_timeout=self.settings.APP_ACCEPT_TIMEOUT_SECONDS,
-            verify_seconds=self.settings.VERIFY_PASSWORD_SECONDS,
+            password_timeout=self.settings.PASSWORD_TIMEOUT_SECONDS,
+            auto_block_seconds=self.settings.AUTO_BLOCK_SECONDS,
             family_password=self.settings.FAMILY_PASSWORD.get_secret_value(),
             prompts=services.prompts,
             events=services.events,
@@ -276,6 +277,7 @@ class StreamHandler:
             self.settings.outbound_allowlist,
         )
         responder = IncidentResponder(bridge, services.actions, lang, trusted_number)
+        bridge.on_senior_blocked = responder.after_senior_block
         session = CallSession(
             call_sid=call_id,
             stream_sid=event.stream_id,

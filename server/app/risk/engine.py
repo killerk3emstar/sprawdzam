@@ -79,6 +79,9 @@ class RiskAssessment:
     signals: dict[str, float] = field(default_factory=dict)
     rule_hit: bool = False
     full_request: bool = False
+    # The model's own score is >= RISK_HANGUP for two readings in a row (secrecy gate aside):
+    # a senior hang-up now counts as blocking the scam.
+    model_high: bool = False
 
 
 class RiskEngine:
@@ -267,6 +270,7 @@ class CallRiskMonitor:
             signals=dict(self.signals),
             rule_hit=rule_hit,
             full_request=full,
+            model_high=self.model_smoother.sustained(self.engine.hangup_threshold),
         )
         log_event(
             logger,

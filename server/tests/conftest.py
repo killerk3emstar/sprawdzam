@@ -55,6 +55,8 @@ def make_settings(tmp_path) -> Callable[..., Settings]:
             "WHISPER_URL": "",
             "BASAL_URL": "",
             "DECISION_BACKEND": "rules",
+            # Keep the no-password countdown short in tests (rounded up to 1 s).
+            "AUTO_BLOCK_SECONDS": 0.5,
         }
         values.update(overrides)
         return Settings(_env_file=None, **values)

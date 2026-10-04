@@ -152,8 +152,20 @@ class IncidentResponder:
             score=assessment.smoothed_score,
             scam_type=assessment.scam_type.value,
         )
+        # Both are no-ops when the senior already ended the call (hang-up during the stage).
         await self._step("blocked_notice", self.call.play_blocked_notice(), call_id)
         await self._step("end_call", self.call.end(EndReason.SCAM_BLOCKED), call_id)
+        await self._follow_up(assessment)
+
+    async def after_senior_block(self) -> None:
+        """The senior hung up on a high-risk call before any password / confirm stage."""
+        assessment = getattr(self.call, "last_assessment", None)
+        if assessment is not None:
+            await self._follow_up(assessment)
+
+    async def _follow_up(self, assessment: RiskAssessment) -> None:
+        """REST hang-up (backup), then call and SMS the trusted person (all guarded)."""
+        call_id = assessment.call_id
         await self._step("hang_up", self.actions.hang_up(call_id), call_id)
         if not self.trusted_number:
             log_event(logger, logging.INFO, "no_trusted_person_configured", call_id=call_id)

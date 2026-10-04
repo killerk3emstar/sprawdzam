@@ -100,9 +100,13 @@ class Settings(BaseSettings):
     # Ringing time before an unanswered protected call is ended.
     APP_ACCEPT_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, le=300)
     # Family password (digits, entered as DTMF by the caller or the senior). Empty = none:
-    # a high-risk call is then blocked right after the verify_password prompt.
+    # a high-risk call then gets `confirm_block` and is ended after AUTO_BLOCK_SECONDS.
     FAMILY_PASSWORD: SecretStr = SecretStr("")
-    VERIFY_PASSWORD_SECONDS: float = Field(default=20.0, gt=0, le=120)
+    # Time for the correct password, counted from the `verify_password` message (stretched
+    # so the caller has a few seconds after hearing the spoken request).
+    PASSWORD_TIMEOUT_SECONDS: float = Field(default=12.0, gt=0, le=120)
+    # Without a family password: countdown from `confirm_block` to the automatic block.
+    AUTO_BLOCK_SECONDS: float = Field(default=8.0, gt=0, le=120)
 
     # Browser test pages /dev/caller and /dev/senior (never enable in production).
     DEV_TOOLS: bool = False

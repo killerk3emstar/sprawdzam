@@ -20,7 +20,7 @@ from app.calls.sender import SafeSender
 from app.logging_setup import log_event
 from app.relay import protocol
 from app.relay.device import DeviceSettings, InvalidSettings
-from app.relay.protocol import BadAppMessage, EndReason, parse_app_message
+from app.relay.protocol import BadAppMessage, parse_app_message
 from app.services import get_services
 
 logger = logging.getLogger(__name__)
@@ -124,7 +124,7 @@ async def call_channel(ws: WebSocket, call_id: str) -> None:
             if isinstance(message, protocol.Accept):
                 await bridge.accept()
             elif isinstance(message, protocol.Hangup):
-                await bridge.end(EndReason.SENIOR_HANGUP)
+                await bridge.senior_hangup()
                 return
             elif isinstance(message, protocol.Dtmf):
                 bridge.on_dtmf(message.digits)

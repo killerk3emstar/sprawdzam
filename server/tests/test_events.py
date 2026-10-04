@@ -135,7 +135,7 @@ def test_scam_call_events_reach_the_console(make_client, make_settings):
     assert risk["level"] == "high" and risk["modelScore"] == 95 and risk["rulesScore"] >= 90
     assert risk["source"] == "model+rules" and risk["scamType"] == "police"
     actions = [e["action"] for e in seen if e["type"] == "action"]
-    assert actions == ["verify_password", "password_failed", "hangup", "sms_requested"]
+    assert actions == ["confirm_block", "hangup", "sms_requested"]
     ended = next(e for e in seen if e["type"] == "call_ended")
     assert ended["reason"] == "scam_blocked"
     alert = ended["alert"]

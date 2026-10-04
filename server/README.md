@@ -192,13 +192,18 @@ See [`docs/APP_PROTOCOL.md`](../docs/APP_PROTOCOL.md). In short: the app keeps
 one-time token (5 min); the app opens `WS /app/call/{callId}` and sends `accept`. Until then
 the caller hears ringback; after it, audio is bridged (app side PCM16 LE 16 kHz, 640-byte
 frames; phone side μ-law 8 kHz). Every risk assessment becomes a `risk` event; the first warn
-adds a warning tone; high risk sends `verify_password` and, unless the family password
-arrives as DTMF in time, ends the call with `call_ended: scam_blocked` (closing the media
+adds a warning tone; high risk sends `verify_password` (`timeoutSeconds`,
+`PASSWORD_TIMEOUT_SECONDS`, default 12) or, without a `FAMILY_PASSWORD`, `confirm_block`
+(`seconds`, `AUTO_BLOCK_SECONDS`, default 8) and, unless the family password arrives as DTMF
+in time, ends the call with `call_ended: scam_blocked` (closing the media
 stream ends the phone call; the guarded REST hang-up runs as a backup), then asks the
 senior's phone to text the trusted person (`alert_trusted` on the control channel, once per
 call, queued 2 min if the app is offline; the app answers `alert_trusted_result`). The
 backend's own Twilio call/SMS to `TRUSTED_PERSON_NUMBER` still runs through the guard (dry-run
-in the demo). No accept within `APP_ACCEPT_TIMEOUT_SECONDS` (30) → `timeout`.
+in the demo). No accept within `APP_ACCEPT_TIMEOUT_SECONDS` (30) → `timeout`. A senior
+`hangup` during the password / confirm stage, or while the model's own score is sustained at
+or above `RISK_HANGUP`, ends the call as `scam_blocked` (same alert path, action
+`senior_blocked`); during a warning only it stays `senior_hangup`.
 
 The senior's microphone audio is also transcribed (speaker "senior", see below).
 
@@ -215,8 +220,8 @@ that stops reading for 5 s is disconnected. Server → page JSON (fields are onl
 {"type":"risk","callId","at","score","modelScore","rulesScore","level":"none|warn|high",
  "scamType","reasons":[...],"source":"model+rules"|"rules"}
 {"type":"action","callId","at","action","detail"}
-   action: warn | verify_password | password_ok | password_failed | hangup |
-           sms_requested | sms_sent | sms_failed | fail_open
+   action: warn | verify_password | password_ok | password_failed | confirm_block |
+           senior_blocked | hangup | sms_requested | sms_sent | sms_failed | fail_open
 {"type":"call_ended","callId","at","reason","alert":<alert>|null}
 <alert> = {"callId","at","caller","scamType","maxScore","outcome":"warned|blocked|normal","actions":[...]}
 ```
@@ -312,7 +317,8 @@ before the DTMF check (the senior hears `warning` first if there was no warn ste
 hears `blocked` before a blocked call ends. While a prompt plays to one side, live audio to
 that side is muted, and prompts are paced in real time. Missing files → beep tones and a
 `voice_prompt_missing` log line; `/health` lists which prompts exist. Without
-`FAMILY_PASSWORD` there is no password prompt: a high-risk call is blocked right away.
+`FAMILY_PASSWORD` there is no password prompt: the app gets `confirm_block` and the call is
+blocked after `AUTO_BLOCK_SECONDS` (8).
 
 ### End-to-end smoke test with the real models
 
@@ -331,7 +337,7 @@ speakers, actions, alert) and answers `alert_trusted` (expected once for a block
 `--echo-gain 0.7` loops the caller audio the app receives back as its microphone (echo
 test); `--senior-audio WAV --senior-at 30` plays a clip as the senior's speech. Run it against
 your own backend port (`--base http://127.0.0.1:<PORT>`), and keep `--tail-seconds` long
-enough to cover the 20 s password window.
+enough to cover the password window (12 s) or the confirm countdown (8 s).
 
 ## Telephony cost and safety guard
 

@@ -14,7 +14,9 @@ from tests.conftest import (
     CALL_SID,
     DEVICE_TOKEN,
     SCAM_TEXT,
+    FakeDecision,
     FakeSTT,
+    RecordingActions,
     admit,
     drain_until_close,
     media,
@@ -256,7 +258,9 @@ def test_risk_events_and_scam_block_reach_the_app(make_client):
         assert [r["level"] for r in risks] == ["none", "high"]
         assert risks[0]["score"] >= 90 and risks[0]["scamType"] == "police"
         assert {"money", "secrecy", "authority"} <= set(risks[1]["reasons"])
-        assert [e["type"] for e in events][-2:] == ["verify_password", "call_ended"]
+        # No family password configured: a countdown instead of the password request.
+        assert [e["type"] for e in events][-2:] == ["confirm_block", "call_ended"]
+        assert events[-2] == {"type": "confirm_block", "seconds": 1}
         assert events[-1]["reason"] == "scam_blocked"
         assert sum(isinstance(m, bytes) for m in messages) >= 25  # caller audio
         assert closing["code"] == 1000
@@ -266,7 +270,7 @@ def test_risk_events_and_scam_block_reach_the_app(make_client):
 @pytest.mark.parametrize("source", ["app", "caller"])
 def test_family_password_lets_the_call_continue(make_client, make_settings, source, caplog):
     caplog.set_level(logging.INFO)
-    settings = make_settings(FAMILY_PASSWORD="2468", VERIFY_PASSWORD_SECONDS=5)
+    settings = make_settings(FAMILY_PASSWORD="2468", PASSWORD_TIMEOUT_SECONDS=5)
     client = make_client(settings, stt=FakeSTT([SCAM_TEXT]), decision_backend=scam_model())
     with client.websocket_connect("/twilio/stream") as stream:
         incoming = start_call(client, stream)
@@ -299,7 +303,7 @@ def test_family_password_lets_the_call_continue(make_client, make_settings, sour
 
 
 def test_wrong_password_blocks(make_client, make_settings):
-    settings = make_settings(FAMILY_PASSWORD="2468", VERIFY_PASSWORD_SECONDS=0.5)
+    settings = make_settings(FAMILY_PASSWORD="2468", PASSWORD_TIMEOUT_SECONDS=0.5)
     client = make_client(settings, stt=FakeSTT([SCAM_TEXT]), decision_backend=scam_model())
     with client.websocket_connect("/twilio/stream") as stream:
         incoming = start_call(client, stream)
@@ -311,6 +315,120 @@ def test_wrong_password_blocks(make_client, make_settings):
             app_ws.send_json({"type": "dtmf", "digits": "1111"})
             assert receive_json(app_ws, "call_ended")["reason"] == "scam_blocked"
         drain_until_close(stream)
+
+
+# ---------------------------------------------------------------------- high-risk stages
+TRUSTED = "+48600000001"  # fake test number
+
+
+def test_verify_password_carries_the_timeout(make_client, make_settings):
+    settings = make_settings(FAMILY_PASSWORD="2468", PASSWORD_TIMEOUT_SECONDS=5)
+    client = make_client(settings, stt=FakeSTT([SCAM_TEXT]), decision_backend=scam_model())
+    with client.websocket_connect("/twilio/stream") as stream:
+        incoming = start_call(client, stream)
+        with client.websocket_connect(call_url(incoming)) as app_ws:
+            app_ws.send_json({"type": "accept"})
+            for payload in speech_mulaw_frames():
+                stream.send_json(media(payload))
+            started = time.monotonic()
+            assert receive_json(app_ws, "verify_password") == {
+                "type": "verify_password",
+                "timeoutSeconds": 5,
+            }
+            assert receive_json(app_ws, "call_ended")["reason"] == "scam_blocked"
+            assert 4.0 <= time.monotonic() - started <= 8.0
+        drain_until_close(stream)
+
+
+@pytest.mark.parametrize("stage", ["verify_password", "confirm_block"])
+def test_senior_hangup_during_stage_blocks_and_alerts(make_client, make_settings, stage):
+    overrides = {"PASSWORD_TIMEOUT_SECONDS": 30, "AUTO_BLOCK_SECONDS": 30}
+    if stage == "verify_password":
+        overrides["FAMILY_PASSWORD"] = "2468"
+    client = make_client(
+        make_settings(**overrides), stt=FakeSTT([SCAM_TEXT]), decision_backend=scam_model()
+    )
+    events = client.app.state.services.events
+    sub = events.subscribe()
+    with client.websocket_connect("/twilio/stream") as stream:
+        incoming = start_call(client, stream)
+        with client.websocket_connect(call_url(incoming)) as app_ws:
+            app_ws.send_json({"type": "accept"})
+            for payload in speech_mulaw_frames():
+                stream.send_json(media(payload))
+            message = receive_json(app_ws, stage)
+            assert message.get("timeoutSeconds", message.get("seconds")) == 30
+            started = time.monotonic()
+            app_ws.send_json({"type": "hangup"})
+            assert receive_json(app_ws, "call_ended")["reason"] == "scam_blocked"
+            assert time.monotonic() - started < 3.0  # not the 30 s countdown
+        drain_until_close(stream)
+    assert wait_until(lambda: client.control.of_type("alert_trusted"))
+    assert len(client.control.of_type("alert_trusted")) == 1
+    published = []
+    while not sub.queue.empty():
+        published.append(sub.queue.get_nowait())
+    actions = [e["action"] for e in published if e["type"] == "action"]
+    assert stage in actions and "senior_blocked" in actions and "hangup" in actions
+    alert = next(e for e in published if e["type"] == "call_ended")["alert"]
+    assert alert["outcome"] == "blocked"
+
+
+def _two_readings(app_ws, stream) -> list[dict]:
+    for payload in speech_mulaw_frames():
+        stream.send_json(media(payload))
+    return [receive_json(app_ws, "risk"), receive_json(app_ws, "risk")]
+
+
+def test_senior_hangup_during_warning_is_a_normal_hangup(make_client):
+    model = FakeDecision({"risk": 60.0, "scam_type": "grandchild", "secrecy": 0.1})
+    client = make_client(stt=FakeSTT(["Babciu, potrzebuję pomocy."]), decision_backend=model)
+    with client.websocket_connect("/twilio/stream") as stream:
+        incoming = start_call(client, stream)
+        with client.websocket_connect(call_url(incoming)) as app_ws:
+            app_ws.send_json({"type": "accept"})
+            assert [r["level"] for r in _two_readings(app_ws, stream)] == ["none", "warn"]
+            app_ws.send_json({"type": "hangup"})
+            assert receive_json(app_ws, "call_ended")["reason"] == "senior_hangup"
+        drain_until_close(stream)
+    time.sleep(0.2)
+    assert client.control.of_type("alert_trusted") == []
+
+
+def test_senior_hangup_with_sustained_model_risk_blocks(make_client, make_settings):
+    # The model is sure (>= RISK_HANGUP twice) but the hang-up gate is closed (no secrecy, no
+    # rule hit): only a warning so far. The senior hanging up now counts as a blocked scam.
+    model = FakeDecision(
+        {
+            "risk": 95.0,
+            "scam_type": "other",
+            "money": 0.2,
+            "secrecy": 0.1,
+            "authority": 0.2,
+            "urgency": 0.2,
+        }
+    )
+    settings = make_settings(
+        TELEPHONY_DRY_RUN=False, OUTBOUND_ALLOWLIST=TRUSTED, TRUSTED_PERSON_NUMBER=TRUSTED
+    )
+    inner = RecordingActions()
+    client = make_client(
+        settings,
+        stt=FakeSTT(["Dzień dobry, jak się pani dzisiaj czuje?"]),
+        decision_backend=model,
+        inner_actions=inner,
+    )
+    with client.websocket_connect("/twilio/stream") as stream:
+        incoming = start_call(client, stream)
+        with client.websocket_connect(call_url(incoming)) as app_ws:
+            app_ws.send_json({"type": "accept"})
+            assert [r["level"] for r in _two_readings(app_ws, stream)] == ["none", "warn"]
+            app_ws.send_json({"type": "hangup"})
+            assert receive_json(app_ws, "call_ended")["reason"] == "scam_blocked"
+        drain_until_close(stream)
+    assert wait_until(lambda: client.control.of_type("alert_trusted"))
+    # Same follow-up as a blocked call: REST hang-up, call and SMS to the trusted person.
+    assert wait_until(lambda: inner.kinds() == ["hang_up", "call", "sms"])
 
 
 # ---------------------------------------------------------------------- logging
