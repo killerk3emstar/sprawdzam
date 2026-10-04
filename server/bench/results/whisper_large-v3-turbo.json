@@ -1,0 +1,241 @@
+{
+ "label": "large-v3-turbo",
+ "url": "http://127.0.0.1:8080",
+ "clips": {
+  "en_normal_family": {
+   "duration_s": 21.95,
+   "full": {
+    "latency_s": 0.702,
+    "rtf": 0.032,
+    "wer": 0.052,
+    "text": "Hi grandma, it's Emma. I just wanted to say thank you for the birthday card and the $20. That was really sweet of you. I'm going to put it towards the concert tickets next month. Mom says we're coming over on Sunday for lunch, around 1 o'clock. Do you need anything from the shop? I can pick up some milk and bread on the way. Okay, love you. See you on Sunday.",
+    "keywords_missing": [
+     "twenty dollars"
+    ]
+   },
+   "chunks_2s": {
+    "n": 11,
+    "p50_s": 0.477,
+    "max_s": 0.483,
+    "wer": 0.312,
+    "keywords_missing": [
+     "birthday",
+     "twenty dollars",
+     "concert"
+    ],
+    "text": "Hi, Grandma. It's Emma. Thank you. card and the $20 that was really sweet of you. I'm going to . months. Mom says we are coming over on Sunday for lunch, around 1 p.m. o'clock. Do you need anything from the shop, I can pick up some milk and bread on the way. Okay, like Love you. See you on Sunday."
+   },
+   "chunks_3s": {
+    "n": 8,
+    "p50_s": 0.489,
+    "max_s": 0.501,
+    "wer": 0.104,
+    "keywords_missing": [
+     "twenty dollars",
+     "concert"
+    ],
+    "text": "Hi, Grandma. It's Emma. I just wanted to say something. Thank you for the birthday card and the $20 that was really sweet of you. I'm going to put it towards the consequences. tickets next month. Mom says we are coming over on Sunday for lunch, around 1 o'clock, due you need anything from the shop? I can pick up some milk and bread on the way. Okay. Love you. See you on Sunday."
+   },
+   "chunks_4s": {
+    "n": 6,
+    "p50_s": 0.5,
+    "max_s": 0.51,
+    "wer": 0.065,
+    "keywords_missing": [
+     "twenty dollars"
+    ],
+    "text": "Hi, Grandma. It's Emma. I just wanted to say thank you for the birthday card and the $20. That was really sweet of you. I'm going to put it towards the concert tickets next month. Mom says we are coming over on Sunday for lunch, around 1 o'clock. Do you need anything from the shop? I can pick up some milk and bread on the way. Okay. Love you. See you on Sunday."
+   }
+  },
+  "en_scam_bank": {
+   "duration_s": 29.47,
+   "full": {
+    "latency_s": 0.786,
+    "rtf": 0.027,
+    "wer": 0.0,
+    "text": "Hello, this is Mark Johnson from the fraud department of your bank. We have detected suspicious activity on your account. Someone is trying to take out a loan in your name to protect your savings. You need to move your money to a safe account right now. Please do not tell anyone about this call, not even your family, because the criminals may be listening. I will need the one-time code from the text message we just sent you and the number on the back of your card. We must act immediately, otherwise you will lose everything.",
+    "keywords_missing": []
+   },
+   "chunks_2s": {
+    "n": 15,
+    "p50_s": 0.48,
+    "max_s": 0.494,
+    "wer": 0.052,
+    "keywords_missing": [],
+    "text": "Hello, this is Mark Johnson from the fraud department of your bank. We have detected suspicious activity on your account, someone is trying to take out a loan in your name to protect To protect your savings, you need to move your money to a safe account right now. Please do not tell anyone about the this call, not even your family. because the criminals may be listening. I will need the one-time code from the text message we just sent to you. and the number on the back of your card. We must act immediately. you will lose everything."
+   },
+   "chunks_3s": {
+    "n": 10,
+    "p50_s": 0.483,
+    "max_s": 0.492,
+    "wer": 0.031,
+    "keywords_missing": [],
+    "text": "Hello, this is Mark Johnson from the Fraud Department of your bank. We have detected suspicious activities on your account, someone is trying to take out a loan in your name to protect your savings you need to move your money to a safe account right now please do not tell anyone about this call, not even your family. because the criminals may be listening. I will need the one- one-time code from the text message we just sent to you. and the number on the back of your card, we must act immediately. Otherwise you will lose everything."
+   },
+   "chunks_4s": {
+    "n": 8,
+    "p50_s": 0.499,
+    "max_s": 0.517,
+    "wer": 0.021,
+    "keywords_missing": [],
+    "text": "Hello, this is Mark Johnson from the Fraud Department of your bank. We have detected suspicious activity on your account. Someone is trying to take out a loan in your name to protect your savings you need to move your money to a safe account right now, please do not tell anyone about the this call, not even your family, because the criminals may be listening. I will need the one-time code from the text message we just sent to you. and the number on the back of your card. We must act immediately, otherwise you will lose everything."
+   }
+  },
+  "pl_normal_family": {
+   "duration_s": 27.97,
+   "full": {
+    "latency_s": 0.894,
+    "rtf": 0.032,
+    "wer": 0.061,
+    "text": "Cześć mamo, tu Kasia. Dzwonię, bo chciałem zapytać, jak się czujesz po wizycie u lekarza. W niedzielę przyjedziemy z dziećmi na obiad, około pierwszej. Mogę przywieźć ciasto ze śliwkami. Aha, i oddam ci te 200 zł za zakupy, które zrobiłaś w zeszłym tygodniu, przyleję ci na konto wieczorem. Tata mówił, że trzeba wymienić żarówkę w przedpokoju, Tomek się tym zajmie. To do zobaczenia w niedzielę, buziaki.",
+    "keywords_missing": [
+     "dwieście złotych",
+     "przeleję"
+    ]
+   },
+   "chunks_2s": {
+    "n": 14,
+    "p50_s": 0.505,
+    "max_s": 0.534,
+    "wer": 0.303,
+    "keywords_missing": [
+     "lekarz",
+     "dwieście złotych",
+     "przeleję"
+    ],
+    "text": "Cześć mamo, tu Kasia. bo chciałem zapytać, Jak się czujesz po wizycie ulekonacji? W niedzielę przyjedziemy z dzieci mi na obiad, około pierwszy Mogę przywieźć ciasto ze śledztą. Aha, i oddem się. te 200 złotych za zakuty? Które zrobiłaś w zeszłym tygodniu? Przyleję Ci na konto wieczorem. Tata mówił, że trzeba wymienić żarówkę sprzed pokoju, to Kto mek się tym zajmie, to do zobaczenia. Do zobaczenia w niedzielę, buziaki!"
+   },
+   "chunks_3s": {
+    "n": 10,
+    "p50_s": 0.523,
+    "max_s": 0.552,
+    "wer": 0.197,
+    "keywords_missing": [
+     "lekarz",
+     "dwieście złotych",
+     "przeleję"
+    ],
+    "text": "Cześć mamo, tu Kasia, dzwonię, bo chcieliby. Chciałem zapytać, jak się czujesz po wizycie u Lekosławień? W niedzielę przyjedziemy z dziećmi na obiad. Około pierwszej, mogę przywieźć ciasto ze śluby. Aha, i oddam Ci te 200 złotych. za zakupy, które zrobiłaś w zeszłym tygodniu? Przyleję ci na konto wieczorem, tata mówił. że trzeba wymienić żarówkę sprzed pokoju, To do zobaczenia w niedzielę. Buzaki."
+   },
+   "chunks_4s": {
+    "n": 7,
+    "p50_s": 0.548,
+    "max_s": 0.595,
+    "wer": 0.182,
+    "keywords_missing": [
+     "dwieście złotych",
+     "przeleję"
+    ],
+    "text": "Cześć mamo, tu Kasia. Dzwonię, bo chciałem zapytać. Jak się czujesz po wizycie u lekarza? W niedzielę przyjedziemy z dzieciom. mi na obiad, około pierwszej, mogę przywieźć ciasto ze śluby Aha, i oddam Ci te 200 zł za zakupy? które zrobiłaś w zeszłym tygodniu, przyleję Ci na konto wieczorem. Tata mówił, że trzeba wymienić żarówkę z przedpokoju, To do zobaczenia w niedzielę. Buziaki."
+   }
+  },
+  "pl_scam_bank": {
+   "duration_s": 32.62,
+   "full": {
+    "latency_s": 1.351,
+    "rtf": 0.041,
+    "wer": 0.227,
+    "text": "Dzień dobry, nazywam się Anna Nowak, dzwonię z działu bezpieczeństwa Pani Banku. Odnotowaliśmy podejrzanu próbę zaciągnięcia kredytu na Pani dane. Pani oszczędności są zagrożone. Żeby je zabezpieczyć, trzeba natychmiast przelać wszystkie pieniądze na bezpieczne konto techniczne, którego numer zaraz podam. Proszę też zainstalować aplikację do zdalnej pomocy i podać mi kod z SMS-a.\n Sprawy może być zamieszany ktoś z banku.",
+    "keywords_missing": [
+     "nikim"
+    ]
+   },
+   "chunks_2s": {
+    "n": 17,
+    "p50_s": 0.515,
+    "max_s": 0.525,
+    "wer": 0.32,
+    "keywords_missing": [
+     "bank",
+     "kredyt",
+     "sms"
+    ],
+    "text": "Dzień dobry, nazywam się Anna Naczova. Dzwonię z działu bezpieczeństwa. Pani Bęku Zobaczmy. Pani Obrany oszczędności są zagrożone, że żeby je zabezpieczyć, trzeba nadzwyczajić. przelać wszystkie pieniądze na bezpieczne konto techniczne? Którego numer zaraz podam? Proszę też zainstalować aplikację do zdalnej pomocy i podać mi kod Bardzo proszę nie rozwiązanie. Zmawiać o tym z nikim, nawet sami. pracownikiem w ododziale, bo w Ktoś zbawiał KONIEC"
+   },
+   "chunks_3s": {
+    "n": 11,
+    "p50_s": 0.518,
+    "max_s": 1.096,
+    "wer": 0.2,
+    "keywords_missing": [
+     "sms",
+     "nikim"
+    ],
+    "text": "Dzień dobry, nazywam się Anna Nowak, dzwoni Zobaczcie. Przez realizowaliśmy podejrzanu próbę zaciągnięcia kredytu na Paniąskę. Pani oszczędności są zagrożone, że Żeby je zabezpieczyć, trzeba natychmiast przelać wszystkie pieniądze na bezpieczne konto techniczne? Którego numer zaraz podam, proszę też zainstalować. aplikację do zdalnej pomocy i podać mi kod za Bardzo proszę nie rozmawiać o tym z nich. nawet z pracownikiem w ododziale, bo w Sprawę może być zamieszany ktoś z banku."
+   },
+   "chunks_4s": {
+    "n": 9,
+    "p50_s": 0.538,
+    "max_s": 0.566,
+    "wer": 0.147,
+    "keywords_missing": [
+     "kredyt",
+     "sms"
+    ],
+    "text": "Dzień dobry, nazywam się Anna Nowak, dzwonię z działu bezpieczeństwa. Pani Banku, odnotowaliśmy podejrzaną próbę zaciągniętym Pani oszczędności są zagrożone, że Żeby je zabezpieczyć, trzeba natychmiast przelać wszystkie pieniądze na bezpieczne konto techniczne, którego numer zaraz podam. Proszę też zainstalować aplikację do zdalnej pomocy i podać mi kod zaśmienny. Bardzo proszę nie rozmawiać o tym z nikim, nawet samochodem. pracownikiem w ododziale, bo w sprawę może być zamieszany ktoś z KONIEC"
+   }
+  },
+  "pl_scam_police": {
+   "duration_s": 34.39,
+   "full": {
+    "latency_s": 1.453,
+    "rtf": 0.042,
+    "wer": 0.089,
+    "text": "Dzień dobry, tu aspirant Jan Kowalski z Komendy Miejskiej Policji w Krakowie. Dzwonię w bardzo pilnej sprawie. Pani wnuczek Michał spowodował dzisiaj wypadek samochodowy, ranna jest kobieta w ciurze. Żeby nie trafił do aresztu, potrzebna jest kaucja w wysokości 30 tysięcy złotych. Proszę nikomu o tym nie mówić, ani córce, ani w banku, bo to utrudni śledztwo. Może pani przekazać gotówkę naszemu kurierowi albo podać kod blik.\n Idę w domu, musimy działać natychmiast, prokurator czeka.",
+    "keywords_missing": []
+   },
+   "chunks_2s": {
+    "n": 17,
+    "p50_s": 0.506,
+    "max_s": 0.61,
+    "wer": 0.177,
+    "keywords_missing": [
+     "aspirant",
+     "natychmiast"
+    ],
+    "text": "Dzień dobry, tu Espirantyjanko z Komendy Miejskiej Policji w Krakowie, dzwonię z bardzo pilnowa. Pani wnuczek Michał. spowodował dzisiaj wypadek samochodowego. ranna jest kobieta w żeby nie trafił do aresztu. potrzebna jest kaucja w wysokim 30 tysięcy złotych. Proszę nikomu o tym nie mówić. ani córce, ani w barstwie. bo to utrudni śledztwo. Może pani przekazać gotówkę? naszemu kurierowi albo podać kod blik, czy ma pani teraz pieniądze idę w domu, musimy działać na prokurator czekł"
+   },
+   "chunks_3s": {
+    "n": 12,
+    "p50_s": 0.538,
+    "max_s": 0.565,
+    "wer": 0.139,
+    "keywords_missing": [],
+    "text": "Dzień dobry, tu aspirant Jan Kowalski z Komendy Młodowej. Miejskiej Policji w Krakowie, dzwonię z bardzo pilnika. Pani wnuczek Michał spowodował dziś Dziś wypadek samochodowy, ranna jest kobieta w żeby nie trafił do aresztu, potrzebna jest Jest kaucja w wysokości 30 tysięcy złotych. Proszę nikomu o tym nie mówić, ani córki. ani w banku, bo to utrudni śledztwo. Może pani przekazać gotówkę naszemu kurierowi? albo podać kod blik. Czy ma pani teraz pieniądze? Idzę w domu, musimy działać natychmiast. Prokurator czeka."
+   },
+   "chunks_4s": {
+    "n": 9,
+    "p50_s": 0.555,
+    "max_s": 0.586,
+    "wer": 0.076,
+    "keywords_missing": [],
+    "text": "Dzień dobry, tu aspirant Jan Kowalski z Komendy Miejskiej Policji. w Krakowie, dzwonię w bardzo pilnej sprawie, pani wnuczek Michałowska, spowodował dzisiaj wypadek samochodowy, ranna jest kobieta w Żeby nie trafiał do aresztu, potrzebna jest kaucja w wysokim. 30 tysięcy złotych. Proszę nikomu o tym nie mówić, ani córce, ani w banku, bo to utrudni śledztwo. Może pani przekazać gotówkę naszemu kurierowi albo podać kod. blik. Czy ma pani teraz pieniądze w domu? Musimy działać na Natychmiast, prokurator czeka."
+   }
+  }
+ },
+ "latency": {
+  "chunk_2s": {
+   "n": 74,
+   "p50_s": 0.499,
+   "p95_s": 0.527,
+   "max_s": 0.61
+  },
+  "chunk_3s": {
+   "n": 51,
+   "p50_s": 0.514,
+   "p95_s": 0.565,
+   "max_s": 1.096
+  },
+  "chunk_4s": {
+   "n": 39,
+   "p50_s": 0.534,
+   "p95_s": 0.576,
+   "max_s": 0.595
+  },
+  "full_clip": {
+   "n": 5,
+   "p50_s": 0.894,
+   "max_s": 1.453
+  }
+ }
+}

@@ -1,0 +1,131 @@
+{
+ "label": "eager, questions=risk",
+ "summary": {
+  "model": {
+   "models": [
+    {
+     "name": "basal-1.0-4.5B",
+     "release_date": "2026-10-01",
+     "description": "basal typed-decision model (choice / noul / score), Polish and English",
+     "mode": "eager",
+     "early_exit": []
+    }
+   ]
+  },
+  "schema": "auto",
+  "questions": [
+   "risk"
+  ],
+  "requests_timed": 6,
+  "latency_p50_s": 1.285,
+  "latency_p95_s": 1.305,
+  "latency_max_s": 1.305,
+  "mean_input_tokens": 781,
+  "scams": 3,
+  "scams_flagged_ge50": 3,
+  "normals": 3,
+  "normals_flagged_ge50": 0,
+  "scams_ge80": 0,
+  "normals_ge80": 0,
+  "min_risk_not_low_scam": 98,
+  "max_risk_not_low_normal": 4
+ },
+ "rows": [
+  {
+   "id": "pl_normal_01_lunch",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 810,
+   "latency_p50_s": 1.305,
+   "server_latency_p50_s": 1.304,
+   "risk_0_100": 2,
+   "risk_not_low": 4,
+   "risk_probs": {
+    "low": 0.956,
+    "medium": 0.025,
+    "high": 0.014,
+    "critical": 0.006
+   }
+  },
+  {
+   "id": "pl_normal_02_son_loan",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 794,
+   "latency_p50_s": 1.297,
+   "server_latency_p50_s": 1.296,
+   "risk_0_100": 1,
+   "risk_not_low": 3,
+   "risk_probs": {
+    "low": 0.973,
+    "medium": 0.016,
+    "high": 0.007,
+    "critical": 0.003
+   }
+  },
+  {
+   "id": "pl_normal_03_clinic",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 730,
+   "latency_p50_s": 1.171,
+   "server_latency_p50_s": 1.17,
+   "risk_0_100": 0,
+   "risk_not_low": 0,
+   "risk_probs": {
+    "low": 0.995,
+    "medium": 0.003,
+    "high": 0.002,
+    "critical": 0.0
+   }
+  },
+  {
+   "id": "pl_scam_01_police",
+   "label": "scam",
+   "expected_type": "police",
+   "input_tokens": 768,
+   "latency_p50_s": 1.251,
+   "server_latency_p50_s": 1.25,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.012,
+    "medium": 0.176,
+    "high": 0.728,
+    "critical": 0.084
+   }
+  },
+  {
+   "id": "pl_scam_02_grandchild",
+   "label": "scam",
+   "expected_type": "grandchild",
+   "input_tokens": 812,
+   "latency_p50_s": 1.292,
+   "server_latency_p50_s": 1.292,
+   "risk_0_100": 63,
+   "risk_not_low": 98,
+   "risk_probs": {
+    "low": 0.015,
+    "medium": 0.15,
+    "high": 0.764,
+    "critical": 0.071
+   }
+  },
+  {
+   "id": "pl_scam_03_bank",
+   "label": "scam",
+   "expected_type": "bank",
+   "input_tokens": 770,
+   "latency_p50_s": 1.278,
+   "server_latency_p50_s": 1.278,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.007,
+    "medium": 0.119,
+    "high": 0.847,
+    "critical": 0.027
+   }
+  }
+ ]
+}

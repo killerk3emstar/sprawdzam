@@ -1,0 +1,8 @@
+Dzwoniący: Dzień dobry, kurier, mam dla pani paczkę ze sklepu ogrodniczego. Będę u pani za jakieś piętnaście minut. Czy ktoś będzie w domu?
+Senior: Dzień dobry, tak, jestem w domu. To pewnie nasiona i ziemia do kwiatów, zamawiała mi wnuczka przez internet.
+Dzwoniący: Zgadza się, nadawca to sklep Zielony Ogród. Paczka jest za pobraniem, do zapłaty osiemdziesiąt dziewięć złotych. Można zapłacić gotówką albo kartą u mnie przy terminalu.
+Senior: Zapłacę gotówką, mam odliczone. A paczka jest ciężka? Bo ja mieszkam na trzecim piętrze bez windy.
+Dzwoniący: Trochę waży, ale spokojnie, wniosę pani na górę.
+Senior: O, to bardzo miło z pana strony. Domofon jest zepsuty, to proszę zadzwonić, jak pan będzie pod blokiem, zejdę otworzyć.
+Dzwoniący: Dobrze, zadzwonię z dołu. Do zobaczenia za kwadrans.
+Senior: Do zobaczenia, dziękuję.

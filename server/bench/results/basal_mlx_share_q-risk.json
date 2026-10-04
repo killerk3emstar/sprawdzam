@@ -1,0 +1,259 @@
+{
+ "label": "mlx share-state, questions=risk",
+ "summary": {
+  "model": {
+   "models": [
+    {
+     "name": "basal-1.0-4.5B",
+     "release_date": "2026-10-01",
+     "description": "basal typed-decision model (choice / noul / score), Polish and English",
+     "mode": "mlx",
+     "early_exit": []
+    }
+   ]
+  },
+  "schema": "auto",
+  "questions": [
+   "risk"
+  ],
+  "requests_timed": 28,
+  "latency_p50_s": 0.725,
+  "latency_p95_s": 0.895,
+  "latency_max_s": 0.902,
+  "mean_input_tokens": 838,
+  "scams": 7,
+  "scams_flagged_ge50": 6,
+  "normals": 7,
+  "normals_flagged_ge50": 0,
+  "scams_ge80": 0,
+  "normals_ge80": 0,
+  "min_risk_not_low_scam": 62,
+  "max_risk_not_low_normal": 5
+ },
+ "rows": [
+  {
+   "id": "en_normal_01_grandson",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 990,
+   "latency_p50_s": 0.816,
+   "server_latency_p50_s": 0.815,
+   "risk_0_100": 2,
+   "risk_not_low": 4,
+   "risk_probs": {
+    "low": 0.964,
+    "medium": 0.019,
+    "high": 0.006,
+    "critical": 0.011
+   }
+  },
+  {
+   "id": "en_normal_02_surgery",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 970,
+   "latency_p50_s": 0.839,
+   "server_latency_p50_s": 0.839,
+   "risk_0_100": 0,
+   "risk_not_low": 1,
+   "risk_probs": {
+    "low": 0.993,
+    "medium": 0.005,
+    "high": 0.001,
+    "critical": 0.001
+   }
+  },
+  {
+   "id": "en_scam_01_bank",
+   "label": "scam",
+   "expected_type": "bank",
+   "input_tokens": 1050,
+   "latency_p50_s": 0.899,
+   "server_latency_p50_s": 0.898,
+   "risk_0_100": 65,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.01,
+    "medium": 0.047,
+    "high": 0.923,
+    "critical": 0.021
+   }
+  },
+  {
+   "id": "en_scam_02_grandchild",
+   "label": "scam",
+   "expected_type": "grandchild",
+   "input_tokens": 1000,
+   "latency_p50_s": 0.828,
+   "server_latency_p50_s": 0.827,
+   "risk_0_100": 30,
+   "risk_not_low": 62,
+   "risk_probs": {
+    "low": 0.382,
+    "medium": 0.431,
+    "high": 0.085,
+    "critical": 0.102
+   }
+  },
+  {
+   "id": "pl_normal_01_lunch",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 810,
+   "latency_p50_s": 0.723,
+   "server_latency_p50_s": 0.722,
+   "risk_0_100": 2,
+   "risk_not_low": 5,
+   "risk_probs": {
+    "low": 0.955,
+    "medium": 0.025,
+    "high": 0.014,
+    "critical": 0.006
+   }
+  },
+  {
+   "id": "pl_normal_02_son_loan",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 794,
+   "latency_p50_s": 0.726,
+   "server_latency_p50_s": 0.725,
+   "risk_0_100": 1,
+   "risk_not_low": 3,
+   "risk_probs": {
+    "low": 0.972,
+    "medium": 0.016,
+    "high": 0.008,
+    "critical": 0.003
+   }
+  },
+  {
+   "id": "pl_normal_03_clinic",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 730,
+   "latency_p50_s": 0.661,
+   "server_latency_p50_s": 0.66,
+   "risk_0_100": 0,
+   "risk_not_low": 0,
+   "risk_probs": {
+    "low": 0.995,
+    "medium": 0.003,
+    "high": 0.002,
+    "critical": 0.0
+   }
+  },
+  {
+   "id": "pl_normal_04_courier",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 722,
+   "latency_p50_s": 0.661,
+   "server_latency_p50_s": 0.66,
+   "risk_0_100": 1,
+   "risk_not_low": 2,
+   "risk_probs": {
+    "low": 0.981,
+    "medium": 0.012,
+    "high": 0.005,
+    "critical": 0.002
+   }
+  },
+  {
+   "id": "pl_normal_05_neighbour",
+   "label": "normal",
+   "expected_type": "none",
+   "input_tokens": 792,
+   "latency_p50_s": 0.732,
+   "server_latency_p50_s": 0.731,
+   "risk_0_100": 0,
+   "risk_not_low": 0,
+   "risk_probs": {
+    "low": 0.996,
+    "medium": 0.003,
+    "high": 0.001,
+    "critical": 0.0
+   }
+  },
+  {
+   "id": "pl_scam_01_police",
+   "label": "scam",
+   "expected_type": "police",
+   "input_tokens": 768,
+   "latency_p50_s": 0.664,
+   "server_latency_p50_s": 0.663,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.013,
+    "medium": 0.165,
+    "high": 0.73,
+    "critical": 0.091
+   }
+  },
+  {
+   "id": "pl_scam_02_grandchild",
+   "label": "scam",
+   "expected_type": "grandchild",
+   "input_tokens": 812,
+   "latency_p50_s": 0.739,
+   "server_latency_p50_s": 0.738,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.014,
+    "medium": 0.138,
+    "high": 0.777,
+    "critical": 0.071
+   }
+  },
+  {
+   "id": "pl_scam_03_bank",
+   "label": "scam",
+   "expected_type": "bank",
+   "input_tokens": 770,
+   "latency_p50_s": 0.667,
+   "server_latency_p50_s": 0.666,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.008,
+    "medium": 0.109,
+    "high": 0.856,
+    "critical": 0.027
+   }
+  },
+  {
+   "id": "pl_scam_04_cbs",
+   "label": "scam",
+   "expected_type": "police",
+   "input_tokens": 764,
+   "latency_p50_s": 0.669,
+   "server_latency_p50_s": 0.668,
+   "risk_0_100": 63,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.013,
+    "medium": 0.139,
+    "high": 0.797,
+    "critical": 0.051
+   }
+  },
+  {
+   "id": "pl_scam_05_investment",
+   "label": "scam",
+   "expected_type": "other",
+   "input_tokens": 754,
+   "latency_p50_s": 0.668,
+   "server_latency_p50_s": 0.667,
+   "risk_0_100": 64,
+   "risk_not_low": 99,
+   "risk_probs": {
+    "low": 0.009,
+    "medium": 0.095,
+    "high": 0.857,
+    "critical": 0.04
+   }
+  }
+ ]
+}

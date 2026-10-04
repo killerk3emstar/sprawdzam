@@ -1,0 +1,9 @@
+Dzwoniący: Dzień dobry, Anna Nowak, dział bezpieczeństwa banku. Czy rozmawiam z panem Stanisławem Wiśniewskim?
+Senior: Tak, słucham.
+Dzwoniący: Odnotowaliśmy podejrzaną próbę zaciągnięcia kredytu na pana dane, na kwotę czterdziestu tysięcy złotych. Czy to pan składał wniosek?
+Senior: Nie, ja żadnego kredytu nie brałem.
+Dzwoniący: Tak myślałam. To oznacza, że ktoś przejął dostęp do pana konta. Pana oszczędności są zagrożone. Musimy je natychmiast zabezpieczyć, przelewając wszystkie środki na bezpieczne konto techniczne banku. Numer konta zaraz panu podam.
+Senior: A nie mogę pójść z tym do oddziału?
+Dzwoniący: Niestety nie, w sprawę może być zamieszany pracownik oddziału, dlatego proszę nikomu o tym nie mówić. Proszę teraz zainstalować na telefonie aplikację do zdalnej pomocy, przeprowadzę pana przez to krok po kroku. A potem proszę mi podać kod BLIK, który pojawi się w aplikacji, żebym mógł potwierdzić tożsamość.
+Senior: Ale ja się na tym nie znam.
+Dzwoniący: Spokojnie, wszystko zrobimy razem, tylko proszę się nie rozłączać, liczy się każda minuta.

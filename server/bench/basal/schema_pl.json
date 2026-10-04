@@ -1,0 +1,10 @@
+{
+  "money": {"type": "noul", "instructions": "Czy dzwoniący prosi o pieniądze, przelew, przekazanie gotówki lub kod BLIK?"},
+  "secrecy": {"type": "noul", "instructions": "Czy dzwoniący prosi, żeby zachować rozmowę w tajemnicy przed rodziną lub bankiem?"},
+  "authority": {"type": "noul", "instructions": "Czy dzwoniący podaje się za policjanta, pracownika banku, prokuratora lub inny urząd?"},
+  "urgency": {"type": "noul", "instructions": "Czy dzwoniący naciska, żeby działać natychmiast?"},
+  "scam_type": {"type": "choice", "instructions": "Który schemat oszustwa najlepiej pasuje do tej rozmowy?", "option_keys": "hide",
+    "criteria": {"none": "Zwykła rozmowa, brak oszustwa", "grandchild": "Krewny w tarapatach potrzebuje pieniędzy (metoda na wnuczka)", "police": "Fałszywy policjant lub prokurator", "bank": "Fałszywy pracownik banku, zagrożone konto", "other": "Inny rodzaj oszustwa"}},
+  "risk": {"type": "score", "instructions": "Jak bardzo prawdopodobne jest, że ta rozmowa to próba oszustwa?", "option_keys": "hide",
+    "criteria": {"low": "Brak sygnałów ostrzegawczych", "medium": "Pewne sygnały ostrzegawcze", "high": "Wyraźny schemat oszustwa", "critical": "Za chwilę dojdzie do przekazania pieniędzy"}}
+}
