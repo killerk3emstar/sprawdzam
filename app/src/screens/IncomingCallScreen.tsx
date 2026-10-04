@@ -1,12 +1,14 @@
 /**
- * Full-screen incoming protected call: masked caller, big Answer (green) and Decline (red).
+ * Incoming protected call: who is calling (masked number), one sentence about the protection, and two
+ * full-width buttons, Answer (green) and Decline (quiet).
  *
  * @format
  */
 
 import React from 'react';
-import {SafeAreaView, StatusBar, StyleSheet, Text, View} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 import {BigButton} from '../components/BigButton';
+import {Screen} from '../components/Screen';
 import {useI18n} from '../i18n';
 import {colors, font, size} from '../theme';
 
@@ -22,10 +24,8 @@ export function IncomingCallScreen({caller, connecting, error, onAccept, onRejec
   const {t} = useI18n();
   const shown = !caller || caller === 'unknown' ? t('hiddenNumber') : caller;
   return (
-    <SafeAreaView style={styles.root} testID="incoming-screen">
-      <View style={styles.inner}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.callBackground} />
-      <View style={styles.top}>
+    <Screen testID="incoming-screen">
+      <View style={styles.top} accessibilityLiveRegion="assertive">
         <Text style={styles.label}>{t('incomingTitle')}</Text>
         <Text
           style={styles.caller}
@@ -35,33 +35,30 @@ export function IncomingCallScreen({caller, connecting, error, onAccept, onRejec
           minimumFontScale={0.6}>
           {shown}
         </Text>
-        <Text style={styles.protected}>{t('incomingProtected')}</Text>
+        <Text style={styles.text}>{t('incomingProtected')}</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
       <View style={styles.actions}>
         <BigButton
           label={connecting ? t('connecting') : t('accept')}
           onPress={onAccept}
-          variant="green"
+          variant="go"
           disabled={connecting}
           tall
           testID="accept-call"
         />
-        <BigButton label={t('reject')} onPress={onReject} variant="red" tall testID="reject-call" />
+        <BigButton label={t('reject')} onPress={onReject} variant="quiet" tall testID="reject-call" />
       </View>
-      </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, backgroundColor: colors.callBackground},
-  inner: {flex: 1, paddingHorizontal: size.padding},
-  top: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  label: {fontSize: font.large, color: colors.onCallMuted},
-  // 40 pt keeps a masked number ("+48 *** *** 123") on one line on a 360 dp wide phone.
-  caller: {fontSize: font.title, fontWeight: '800', color: colors.onCall, marginTop: 16, textAlign: 'center'},
-  protected: {fontSize: font.body, color: colors.onCallMuted, marginTop: 20, textAlign: 'center'},
-  error: {fontSize: font.body, color: '#FFCDD2', marginTop: 16, textAlign: 'center'},
-  actions: {gap: 20, paddingBottom: 32},
+  top: {flex: 1, paddingHorizontal: size.side, paddingTop: 64},
+  label: {fontSize: font.small, color: colors.muted},
+  // 48 pt, shrinks to fit so a masked number ("+48 *** *** 123") stays on one line on a 360 dp phone.
+  caller: {fontSize: font.huge, fontWeight: '700', color: colors.ink, marginTop: 12},
+  text: {fontSize: font.body, lineHeight: 36, color: colors.ink, marginTop: 32, maxWidth: 520},
+  error: {fontSize: font.small, lineHeight: 32, color: colors.red, marginTop: 24},
+  actions: {gap: size.gap, paddingHorizontal: size.side, paddingBottom: 32},
 });

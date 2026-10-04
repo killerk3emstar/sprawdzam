@@ -1,12 +1,13 @@
 /**
- * Big numeric keypad for the family password (no system keyboard needed).
+ * Big numeric keypad for the family password (no system keyboard needed): light grey keys, near-black digits,
+ * the Send key in near-black as the one primary action.
  *
  * @format
  */
 
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {colors, font} from '../theme';
+import {colors, font, size} from '../theme';
 
 type Props = {
   onDigit: (digit: string) => void;
@@ -39,10 +40,17 @@ function Key({label, onPress, accessibilityLabel, variant = 'digit', disabled}: 
       testID={`key-${accessibilityLabel ?? label}`}
       style={({pressed}) => [
         styles.key,
-        variant === 'submit' ? styles.submit : variant === 'action' ? styles.action : null,
+        variant === 'submit' ? styles.submit : null,
         {opacity: disabled ? 0.4 : pressed ? 0.7 : 1},
       ]}>
-      <Text style={[styles.keyLabel, variant !== 'digit' ? styles.smallLabel : null]}>{label}</Text>
+      <Text
+        style={[
+          styles.keyLabel,
+          variant !== 'digit' ? styles.smallLabel : null,
+          variant === 'submit' ? styles.submitLabel : null,
+        ]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -58,7 +66,7 @@ export function Keypad({onDigit, onDelete, onSubmit, deleteLabel, submitLabel, s
         </View>
       ))}
       <View style={styles.row}>
-        <Key label="⌫" accessibilityLabel={deleteLabel} variant="action" onPress={onDelete} />
+        <Key label={deleteLabel} variant="action" onPress={onDelete} />
         <Key label="0" onPress={() => onDigit('0')} />
         <Key label={submitLabel} variant="submit" onPress={onSubmit} disabled={submitDisabled} />
       </View>
@@ -67,18 +75,18 @@ export function Keypad({onDigit, onDelete, onSubmit, deleteLabel, submitLabel, s
 }
 
 const styles = StyleSheet.create({
-  pad: {gap: 8, marginTop: 8},
+  pad: {gap: 8},
   row: {flexDirection: 'row', gap: 8},
   key: {
     flex: 1,
     minHeight: 64,
-    borderRadius: 16,
-    backgroundColor: '#25313D',
+    borderRadius: size.radius,
+    backgroundColor: colors.quiet,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  action: {backgroundColor: '#3A4754'},
-  submit: {backgroundColor: colors.green},
-  keyLabel: {color: colors.onCall, fontSize: font.title, fontWeight: '700'},
-  smallLabel: {fontSize: font.large},
+  submit: {backgroundColor: colors.ink},
+  keyLabel: {color: colors.ink, fontSize: 36, fontWeight: '600'},
+  smallLabel: {fontSize: font.body, fontWeight: '700'},
+  submitLabel: {color: colors.onColor},
 });
