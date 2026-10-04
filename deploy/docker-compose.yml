@@ -1,0 +1,48 @@
+# Single-host deployment (AWS EC2 or the Mac): backend container + Caddy with automatic HTTPS.
+# Models run outside the containers (natively on the Mac, or on another host).
+#
+#   docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
+#
+# `--env-file .env` (repository root) provides DOMAIN, ACME_EMAIL and DOCKER_*_URL for the
+# substitutions below; the same file is passed to the backend as its configuration.
+name: sprawdzam
+
+services:
+  backend:
+    build: ../server
+    env_file: ../.env
+    environment:
+      DATA_DIR: /app/data
+      PUBLIC_BASE_URL: https://${DOMAIN:?set DOMAIN in .env}
+      # The Mac's natively running models are reachable from containers here; on AWS point
+      # these at the model host.
+      WHISPER_URL: ${DOCKER_WHISPER_URL:-http://host.docker.internal:8080}
+      BASAL_URL: ${DOCKER_BASAL_URL:-http://host.docker.internal:8000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - backend-data:/app/data
+    expose:
+      - "8765"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  backend-data:
+  caddy-data:
+  caddy-config:

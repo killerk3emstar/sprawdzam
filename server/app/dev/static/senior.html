@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dev senior app</title>
+<link rel="stylesheet" href="/dev/static/style.css">
+</head>
+<body>
+<main>
+  <h1>Dev senior app <small>stand-in speaking app protocol v0</small></h1>
+  <div class="card">
+    <label>Device token (APP_DEVICE_TOKEN)
+      <input id="token" type="password" autocomplete="off"></label>
+    <div class="row">
+      <button id="on" class="primary">Turn protection on</button>
+      <button id="off" disabled>Turn off</button>
+    </div>
+    <p>Protection: <span id="prot" class="status off">off</span></p>
+  </div>
+  <details class="card" id="settingsbox">
+    <summary>Settings (sent to the backend on connect)</summary>
+    <label>Language
+      <select id="setLang"><option>pl</option><option>en</option></select></label>
+    <label>Trusted person name <input id="setName" autocomplete="off"></label>
+    <label>Trusted person number (E.164) <input id="setNumber" placeholder="+48600000001" autocomplete="off"></label>
+    <label>Whitelist (contacts, one E.164 number per line)
+      <textarea id="setWhitelist" rows="3" placeholder="+48500000002"></textarea></label>
+    <button id="sendSettings">Send settings</button>
+  </details>
+  <div class="card" id="callbox" hidden>
+    <h2 style="margin:0">Call from <span id="callerNo"></span></h2>
+    <p>State: <span id="callState" class="status"></span></p>
+    <div class="row">
+      <button id="accept" class="primary">Accept</button>
+      <button id="hangup" class="danger">Hang up</button>
+    </div>
+    <p style="margin-bottom:4px">Risk <b id="score">0</b>/100 · <span id="level">none</span> ·
+      pattern <span id="scam">none</span> · <span id="reasons"></span></p>
+    <div class="bar"><div id="bar"></div></div>
+    <div id="verify" hidden>
+      <p class="status high">Ask the caller for the family password</p>
+      <label>Password heard from the caller <input id="pw" inputmode="numeric"></label>
+      <button id="sendpw">Check</button>
+    </div>
+  </div>
+  <pre id="log"></pre>
+</main>
+<script type="module">
+import { floatToPcm16, makeLogger, pcm16ToFloat, startAudio, wsBase } from "/dev/static/audio.js";
+
+const $ = (id) => document.getElementById(id);
+const log = makeLogger($("log"));
+let control = null, pingTimer = null, reconnectTimer = null, wantOn = false;
+let call = null, audio = null;
+
+try { $("token").value = localStorage.getItem("devDeviceToken") || ""; } catch {}
+
+function setProt(text, cls) { $("prot").textContent = text; $("prot").className = `status ${cls}`; }
+function setState(text) { $("callState").textContent = text; log(`call: ${text}`); }
+
+function openControl() {
+  const url = `${wsBase()}/app/control?device_token=${encodeURIComponent($("token").value)}`;
+  control = new WebSocket(url);
+  control.onopen = () => {
+    pingTimer = setInterval(() => control && control.send(JSON.stringify({ type: "ping" })), 15000);
+  };
+  control.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === "protection_status") {
+      msg.available ? setProt("on", "on") : setProt("unavailable", "off");
+      if (msg.available) sendSettings();
+    } else if (msg.type === "incoming_call") {
+      onIncoming(msg);
+    } else if (msg.type === "settings_ack") {
+      log(msg.accepted ? `settings accepted (whitelist ${msg.whitelist}, ignored ${msg.ignored})`
+                       : `settings rejected: ${msg.error}`);
+    }
+  };
+  control.onclose = (event) => {
+    clearInterval(pingTimer);
+    control = null;
+    if (event.code === 1008) { wantOn = false; setProt("device token rejected", "off"); syncButtons(); return; }
+    setProt(wantOn ? `unavailable, reconnecting (code ${event.code})` : "off", "off");
+    if (wantOn) reconnectTimer = setTimeout(openControl, 3000);
+  };
+}
+
+function readSettings() {
+  const number = $("setNumber").value.trim();
+  const whitelist = $("setWhitelist").value.split(/[\s,;]+/).map((n) => n.trim()).filter(Boolean);
+  return {
+    type: "settings",
+    lang: $("setLang").value,
+    trustedPerson: number ? { name: $("setName").value.trim(), number } : null,
+    whitelist,
+  };
+}
+
+function sendSettings() {
+  const settings = readSettings();
+  try { localStorage.setItem("devSettings", JSON.stringify(settings)); } catch {}
+  if (control && control.readyState === WebSocket.OPEN) control.send(JSON.stringify(settings));
+}
+
+try {
+  const saved = JSON.parse(localStorage.getItem("devSettings") || "null");
+  if (saved) {
+    $("setLang").value = saved.lang || "pl";
+    $("setName").value = (saved.trustedPerson && saved.trustedPerson.name) || "";
+    $("setNumber").value = (saved.trustedPerson && saved.trustedPerson.number) || "";
+    $("setWhitelist").value = (saved.whitelist || []).join("\n");
+  }
+} catch {}
+
+$("sendSettings").onclick = sendSettings;
+
+function syncButtons() { $("on").disabled = wantOn; $("off").disabled = !wantOn; }
+
+$("on").onclick = () => {
+  wantOn = true;
+  try { localStorage.setItem("devDeviceToken", $("token").value); } catch {}
+  syncButtons();
+  openControl();
+};
+$("off").onclick = () => {
+  wantOn = false;
+  clearTimeout(reconnectTimer);
+  if (control) control.close();
+  syncButtons();
+};
+
+function onIncoming(msg) {
+  if (call) { log("another incoming call while busy: ignored"); return; }
+  $("callbox").hidden = false;
+  $("callerNo").textContent = `${msg.caller} (${msg.lang})${msg.trusted ? " · contact, not analysed" : ""}`;
+  $("accept").disabled = false;
+  $("hangup").disabled = false;
+  $("verify").hidden = true;
+  showRisk({ score: 0, level: "none", scamType: "none", reasons: [] });
+  const ws = new WebSocket(`${wsBase()}/app/call/${encodeURIComponent(msg.callId)}?token=${encodeURIComponent(msg.token)}`);
+  ws.binaryType = "arraybuffer";
+  call = { id: msg.callId, ws, accepted: false };
+  setState("ringing");
+  ws.onmessage = (event) => {
+    if (typeof event.data !== "string") {
+      if (audio) audio.play(pcm16ToFloat(event.data));
+      return;
+    }
+    const m = JSON.parse(event.data);
+    if (m.type === "risk") showRisk(m);
+    else if (m.type === "verify_password") { $("verify").hidden = false; log("verify_password"); }
+    else if (m.type === "call_ended") setState(`ended: ${m.reason}`);
+  };
+  ws.onclose = (event) => { log(`call channel closed (code ${event.code})`); endCall(); };
+}
+
+function showRisk(m) {
+  $("score").textContent = m.score;
+  $("level").textContent = m.level;
+  $("level").className = m.level === "none" ? "" : m.level;
+  $("scam").textContent = m.scamType;
+  $("reasons").textContent = m.reasons.join(", ");
+  $("bar").style.width = `${m.score}%`;
+  $("bar").className = m.level === "none" ? "" : m.level;
+  if (m.level !== "none") log(`risk ${m.score} ${m.level} ${m.scamType} [${m.reasons.join(",")}]`);
+}
+
+$("accept").onclick = async () => {
+  if (!call) return;
+  $("accept").disabled = true;
+  try {
+    audio = await startAudio({ targetRate: 16000, frameSamples: 320, onFrame: (samples) => {
+      if (call && call.accepted && call.ws.readyState === WebSocket.OPEN) call.ws.send(floatToPcm16(samples));
+    } });
+  } catch (err) { log(`microphone error: ${err.message}`); }
+  call.ws.send(JSON.stringify({ type: "accept" }));
+  call.accepted = true;
+  setState("in call");
+};
+
+$("hangup").onclick = () => { if (call) call.ws.send(JSON.stringify({ type: "hangup" })); };
+$("sendpw").onclick = () => {
+  const digits = $("pw").value.trim();
+  if (call && /^[0-9*#]{1,32}$/.test(digits)) call.ws.send(JSON.stringify({ type: "dtmf", digits }));
+};
+
+async function endCall() {
+  if (audio) { const a = audio; audio = null; await a.stop(); }
+  call = null;
+  $("accept").disabled = true;
+  $("hangup").disabled = true;
+}
+</script>
+</body>
+</html>
