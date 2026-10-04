@@ -176,16 +176,26 @@ async def test_warn_needs_two_readings_in_a_row():
     assert handler.actions == [Action.WARN]
 
 
-async def test_hangup_needs_secrecy_or_rule_hit():
-    # Model says 95 every time, but the full answer has no secrecy and the text has no
-    # keyword-rule hit: warn only, never the password check / hang-up.
+async def test_hangup_needs_secrecy_money_or_rule_hit():
+    # Model says 95 every time, but the full answer has no secrecy and no money ask and the
+    # text has no keyword-rule hit: warn only, never the password check / hang-up.
     handler = RecordingHandler()
-    backend = TwoTierDecision(QUICK, {**FULL, "secrecy": 0.1})
+    backend = TwoTierDecision(QUICK, {**FULL, "secrecy": 0.1, "money": 0.1})
     monitor = engine_with(backend).start_call("CA1", "pl", handler)
     results = [await monitor.evaluate(window(FAMILY_PL)) for _ in range(5)]
     assert not results[-1].rule_hit
     assert handler.actions == [Action.WARN]
     assert results[-1].level is Action.WARN
+
+
+async def test_hangup_with_model_money_ask_without_secrecy():
+    # A live grandchild scam without "don't tell anyone": model 95+ and it reads a money ask.
+    handler = RecordingHandler()
+    backend = TwoTierDecision(QUICK, {**FULL, "secrecy": 0.25, "money": 0.63})
+    monitor = engine_with(backend).start_call("CA1", "pl", handler)
+    for _ in range(3):
+        await monitor.evaluate(window(FAMILY_PL))
+    assert handler.actions == [Action.VERIFY_THEN_HANGUP]
 
 
 async def test_hangup_with_model_secrecy():
@@ -306,7 +316,7 @@ def test_invalid_thresholds_rejected():
 
 async def test_stale_secrecy_is_refreshed_when_enabled():
     now = [0.0]
-    backend = TwoTierDecision(QUICK, {**FULL, "secrecy": 0.1})
+    backend = TwoTierDecision(QUICK, {**FULL, "secrecy": 0.1, "money": 0.1})
     engine = RiskEngine(decision_backend=backend, full_refresh_seconds=10, clock=lambda: now[0])
     handler = RecordingHandler()
     monitor = engine.start_call("CA1", "pl", handler)
