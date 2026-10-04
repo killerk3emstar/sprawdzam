@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 
 _RANGE_ERROR_TYPES = {"less_than_equal", "greater_than_equal", "finite_number"}
 MAX_FULL_ATTEMPTS = 2
+MONEY_HANGUP_MIN = 0.5  # model's `money` signal that backs a hang-up
 
 
 class ActionHandler(Protocol):
@@ -211,8 +212,12 @@ class CallRiskMonitor:
     def _level(self, rule_hit: bool) -> Action:
         engine = self.engine
         secrecy = self.signals.get("secrecy", 0.0)
+        # The model's score alone is not enough; it must be backed by secrecy, a rule hit, or
+        # the model's own reading that the caller asks for money (keyword "money" alone is too
+        # common in family calls).
+        money = self.signals.get("money", 0.0) >= MONEY_HANGUP_MIN
         if self.model_smoother.sustained(engine.hangup_threshold) and (
-            secrecy >= engine.secrecy_hangup_min or rule_hit
+            secrecy >= engine.secrecy_hangup_min or rule_hit or money
         ):
             return Action.VERIFY_THEN_HANGUP
         if self.smoother.sustained(engine.warn_threshold):
