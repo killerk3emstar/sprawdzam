@@ -17,6 +17,7 @@ import hmac
 import logging
 import math
 from collections.abc import Awaitable, Callable, Coroutine
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -208,7 +209,14 @@ class CallBridge:
         assessment = self.last_assessment
         scam_type = assessment.scam_type.value if assessment else "none"
         reasons = [name for name, on in assessment.categories.items() if on] if assessment else []
-        text = compose_alert_text(scam_type, reasons, self.lang)
+        text = compose_alert_text(
+            scam_type,
+            reasons,
+            self.lang,
+            at=datetime.now(UTC),
+            caller=self.caller_display,
+            money_ask=assessment.rules.money_ask if assessment else None,
+        )
         try:
             await self.hub.send_trusted_alert(
                 self.call_id,

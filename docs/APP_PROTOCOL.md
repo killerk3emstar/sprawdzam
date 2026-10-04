@@ -216,13 +216,19 @@ After a call ends with `scam_blocked`, the backend asks the senior's phone to te
 trusted person, on the **control channel** (the call channel is already closed):
 
 ```json
-{"type": "alert_trusted", "callId": "CA9f…", "scamType": "police", "reasons": ["authority", "money", "secrecy"], "lang": "pl", "text": "Sprawdzam: babcia mogla rozmawiac z oszustem (falszywy policjant, prosba o gotowke). Zadzwon do niej."}
+{"type": "alert_trusted", "callId": "CA9f…", "scamType": "police", "reasons": ["authority", "money", "secrecy"], "lang": "pl", "text": "Sprawdzam 04:31: babcia mogla rozmawiac z oszustem (falszywy policjant, prosba o gotowke, nr ...123). Zadzwon do niej."}
 ```
 
 - `text` is composed by the backend and should be sent **as is** as one SMS to the trusted
   person from the app's settings: plain ASCII (no Polish diacritics, so it stays one GSM-7
-  segment), no links, under 160 characters, PL or EN by `lang`. It names the scam pattern
-  (from `scamType`) and the main warning sign (from `reasons`), or is generic.
+  segment), no links, at most 159 characters, PL or EN by `lang`. It contains the local time
+  of the alert (Europe/Warsaw, HH:MM), the scam pattern (from `scamType`), the concrete money
+  ask found in the call (BLIK code, cash, transfer, "safe account"…) or else the main warning
+  sign (from `reasons`), and the last three digits of the caller's number ("nr ...123" /
+  "from a number ending 123"); details are dropped when the text would be too long, and it
+  is generic when nothing is known. EN example: `Second Ear 04:31: your relative may have
+  talked to a scammer (fake bank employee, asked for a BLIK code, from a number ending 789).
+  Please call them.`
   `scamType` / `reasons` have the same values as in `risk` and are for display only.
 - **At most one `alert_trusted` per `callId`**, guaranteed by the backend, also across
   reconnects; the app should still ignore a repeated `callId`.
