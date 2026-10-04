@@ -268,6 +268,7 @@ class StreamHandler:
             verify_seconds=self.settings.VERIFY_PASSWORD_SECONDS,
             family_password=self.settings.FAMILY_PASSWORD.get_secret_value(),
             prompts=services.prompts,
+            events=services.events,
         )
         trusted_number = choose_trusted_number(
             services.hub.device_settings,
@@ -287,9 +288,18 @@ class StreamHandler:
                 max_seconds=self.settings.STT_MAX_SEGMENT_SECONDS,
                 pause_seconds=self.settings.STT_PAUSE_SECONDS,
             ),
+            senior_segmenter=PauseSegmenter(
+                STT_RATE,
+                min_seconds=self.settings.STT_SENIOR_MIN_SEGMENT_SECONDS,
+                max_seconds=self.settings.STT_MAX_SEGMENT_SECONDS,
+                pause_seconds=self.settings.STT_PAUSE_SECONDS,
+            ),
             stt_timeout=self.settings.STT_TIMEOUT_SECONDS,
             analyse=not trusted,
+            analyse_senior=self.settings.ANALYSE_SENIOR,
+            events=services.events,
         )
+        bridge.senior_audio_sink = session.feed_senior_pcm16
         session.start()
         self.session, self.bridge = session, bridge
         services.sessions[call_id] = session

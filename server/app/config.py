@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     STT_MAX_SEGMENT_SECONDS: float = Field(default=8.0, ge=1.0, le=25.0)
     STT_PAUSE_SECONDS: float = Field(default=0.2, ge=0.1, le=2.0)
     STT_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0, le=60)
+    # The senior's microphone (from the app) is transcribed too, as context for the model.
+    ANALYSE_SENIOR: bool = True
+    STT_SENIOR_MIN_SEGMENT_SECONDS: float = Field(default=1.5, ge=0.5, le=10.0)
 
     # Risk thresholds (0-100); warn and hang-up each need two readings in a row
     RISK_WARN: int = Field(default=50, ge=0, le=100)
