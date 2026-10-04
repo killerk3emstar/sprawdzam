@@ -483,7 +483,9 @@ async function cleanup() {
 
 $("call").onclick = async () => {
   // iOS: the AudioContext must be created and resumed synchronously in the tap handler.
-  setAudioSession(useMic ? "play-and-record" : "playback");
+  // Script mode: "playback" also plays with the ringer switch on silent (iOS 17+). Microphone
+  // mode keeps Safari's default routing for calls with getUserMedia.
+  setAudioSession(useMic ? "auto" : "playback");
   let ctx = null;
   try { ctx = unlockAudio(); } catch (err) { log(`audio unlock failed: ${err.message}`); }
   showBanner("");

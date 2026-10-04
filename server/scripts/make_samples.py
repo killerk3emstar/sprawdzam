@@ -3,10 +3,10 @@
 Texts: `scripts/samples/*.txt` (caller-side monologues from the model bench, our own
 material, plus the six live-demo scripts: police, grandchild and a normal call in PL and
 EN). Sentences are separated by `say` silences (`--pause-ms`) so the backend's pause-based
-segmenter cuts 3-8 s speech segments, as with a real caller. Output: raw G.711 mu-law, 8 kHz, mono, phone band-pass, in
-`<DATA_DIR>/samples/<name>.ulaw` (default `data/samples/`). The audio is NOT committed (Apple
-voice licensing). Files starting with `pl_` use the Polish voice, `en_scam_police` the male
-English voice, the other `en_` files the female English one.
+segmenter cuts 3-8 s speech segments, as with a real caller. Output: raw G.711 mu-law,
+8 kHz, mono, phone band-pass, in `<DATA_DIR>/samples/<name>.ulaw` (default `data/samples/`).
+The audio is NOT committed (Apple voice licensing). Files starting with `pl_` use the Polish
+voice, `en_scam_police` the male English voice, the other `en_` files the female one.
 
     scripts/make_samples.sh                 # Zosia (pl), Samantha and Daniel (en)
     scripts/make_samples.sh --only pl_scam_police
