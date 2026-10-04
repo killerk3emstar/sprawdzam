@@ -1,9 +1,11 @@
 # AI features
 
-> **Status: draft (4 Oct 2026, HackYeah).** Statements marked **[verified]** were measured by us on the
-> development Mac (Apple M4 Pro, 48 GB RAM) with the scripts named next to them. **[designed]** means implemented
-> in the backend (unit-tested, and run end to end with `server/scripts/smoke_call.py` against the real models)
-> but not yet tested with real phone calls. **[planned]** means not built yet.
+> **Status: 4 Oct 2026, HackYeah.** Statements marked **[verified]** were measured by us on the development Mac
+> (Apple M4 Pro, 48 GB RAM) with the scripts named next to them. **[run live]** means built and run by the team
+> on real hardware: a Samsung S21+ (Android 15) as the senior's phone, an iPhone as the caller through the
+> operator network simulator over a Cloudflare quick tunnel, the models on the MacBook (no real telephony; Twilio
+> in dry-run). **[designed]** means implemented in the backend (unit-tested, and run end to end with
+> `server/scripts/smoke_call.py` against the real models) but not run live. **[planned]** means not built yet.
 
 Sprawdzam / Second Ear protects older people from phone scams ("grandchild", fake police, fake bank employee,
 investment fraud). Calls from numbers outside the senior's contacts are routed through our backend. Two
@@ -18,7 +20,7 @@ cloning, no profiling of the caller. It analyses *what is said* (text), not *who
 
 | component | what it is | where it runs | role |
 |---|---|---|---|
-| **Whisper large-v3-turbo** (OpenAI, MIT licence) | speech-to-text, served by `whisper-server` from whisper.cpp 1.9.4 (Metal) | our machine (Mac / EC2), never a third-party API | turns utterances of call audio (caller 3–8 s, senior 1.5–8 s) into text; language forced from the senior's settings (PL or EN) |
+| **Whisper large-v3-turbo** (OpenAI, MIT licence) | speech-to-text, served by `whisper-server` from whisper.cpp 1.9.4 (Metal) | our machine (Mac / EC2), never a third-party API | turns utterances of call audio (caller 3–8 s, senior 1.5–5 s) into text; language forced from the senior's settings (PL or EN) |
 | **basal-1.0-4.5B** (`Remek/basal-1.0-4.5B`, Apache 2.0, Polish decision model built on Bielik) | typed-decision model: answers yes/no, multiple-choice and ordinal-score questions about a text with calibrated probabilities | `basal-serve` on our machine, PyTorch MPS, bf16, with our `--share-state` patch | main scam-risk estimate (`risk`) and scam pattern (`scam_type`) |
 | **basal-1.0-1.5B** (`Remek/basal-1.0-1.5B`, same API) | smaller variant | same server, other port | fallback if latency or GPU memory becomes a problem; evaluated, not the default |
 | **Keyword rules** (ours, `server/app/risk/rules.py`) | 55 regular-expression rules (29 Polish, 26 English) in four categories (money, secrecy, authority, urgency) plus "story" context (accident, bail, account at risk, remote-access app) | backend process | safety net when the model is slow, down or wrong; combined with the model by taking the maximum |
@@ -35,34 +37,45 @@ Answers stay equivalent (≤ 0.02 difference in probabilities, from bf16 batchin
 
 ```
 caller's phone audio (Twilio Media Stream, μ-law 8 kHz, 20 ms frames)
-  → decode + resample to 16 kHz PCM                                     [designed]
-  → pause-based segmentation into 3–8 s utterances (energy VAD)         [designed; Silero VAD planned]
+  → decode + resample to 16 kHz PCM                                     [run live]
+  → pause-based segmentation into 3–8 s utterances (energy VAD)         [run live; Silero VAD planned]
 senior's microphone (senior app, PCM16 16 kHz over the call WebSocket)
-  → its own pause segmenter, 1.5–8 s utterances                         [designed]
+  → its own pause segmenter, 1.5–5 s utterances                         [run live]
   → one sequential Whisper worker for both sides, caller segments first;
     Whisper large-v3-turbo, language = senior's setting, 5 s timeout
-    (3 s for senior segments; senior segments older than 12 s skipped)  [designed]
+    (3 s for senior segments; senior segments older than 12 s skipped)  [run live]
   → echo guard: drop a senior utterance that repeats the caller or our voice prompt
-    from the last 15 s (the phone's speaker leaking into its microphone) [designed]
-  → rolling transcript window, last 60 s, RAM only ("Dzwoniący: …" / "Senior: …")  [designed]
+    from the last 15 s (the phone's speaker leaking into its microphone), trim echoed
+    word runs from longer segments                                       [run live]
+  → rolling transcript window, last 60 s, RAM only ("Dzwoniący: …" / "Senior: …")  [run live]
   → every new caller utterance (~3–4 s), and senior utterances when no caller one is waiting:
-       basal-1: questions `risk` (low/medium/high/critical) + `scam_type`  [designed]
-       keyword rules on the same window                                  [designed]
-       score = max( 100·(1 − P(risk = low)), rules score )               [designed]
+       basal-1: questions `risk` (low/medium/high/critical) + `scam_type`  [run live]
+       keyword rules on the same window                                  [run live]
+       score = max( 100·(1 − P(risk = low)), rules score )               [run live]
   → smoothing: warn when the last 2 combined readings are both ≥ 50;
                hang-up path only when the last 2 MODEL readings are both ≥ 90
-               and (model secrecy ≥ 0.8 or a keyword-rule hit); rules alone never hang up  [designed]
+               and (model secrecy ≥ 0.8 or a keyword-rule hit or model money ≥ 0.5);
+               rules alone never hang up                                 [run live]
   → actions (escalate only): spoken warning + in-app warning → ask the caller for the
-    family password (DTMF) → end the call → the senior's phone texts the trusted person
-    (`alert_trusted`, docs/APP_PROTOCOL.md)                               [designed]
+    family password (DTMF, 12 s with a countdown in the app; with no password configured
+    an 8 s `confirm_block` countdown with a "hang up now" button) → end the call → the
+    senior's phone texts the trusted person (`alert_trusted`, docs/APP_PROTOCOL.md, one SMS
+    per call) → the app offers to call the trusted person back  [run live; no-password
+    countdown on the emulator and in unit tests only]
   → alert summary (time, masked number, max score, scam type, outcome, actions; no transcript)
-    in RAM for the operator console (`/dev/events`, `/dev/alerts`, last 50)  [designed]
+    in RAM for the operator console (`/dev/events`, `/dev/alerts`, last 50)  [run live]
 ```
 
 - Two-tier questions: every reading asks only `risk` + `scam_type` (~1.1 s on the 4.5B model); after the first
   reading at or above the warning threshold, the full six-question schema (`money`, `secrecy`, `authority`,
-  `urgency`, `scam_type`, `risk`, ~2 s) is asked once; its `secrecy` answer feeds the hang-up gate and the four
-  signals become the `reasons` shown to the senior. **[designed, `server/app/risk/engine.py`]**
+  `urgency`, `scam_type`, `risk`, ~2 s) is asked once; its `secrecy` and `money` answers feed the hang-up gate
+  and the four signals become the `reasons` shown to the senior. While the model is at ≥ 90 but the gate is
+  still closed, the full set is asked again at most every 10 s (`DECISION_FULL_REFRESH_SECONDS`), so secrecy or
+  money said later in the call is seen. **[run live, `server/app/risk/engine.py`]**
+- Why `money` backs a hang-up: in a live test on 4 Oct the caller improvised a fake-police call without asking
+  for secrecy; the model stayed at 98–99 and the old gate (secrecy or rule hit) never opened. The model's own
+  money-ask answer (≥ 0.5, `MONEY_HANGUP_MIN`) now counts too; the keyword "money" alone does not, because it is
+  common in family calls.
 - The model score is `100·(1 − P(low))`, not the expected level: basal almost never picks `critical`, so the
   expected level of a clear scam stays around 63–65 and would never reach a hang-up threshold.
   **[verified, `server/bench/README.md`]**
@@ -73,8 +86,9 @@ senior's microphone (senior app, PCM16 16 kHz over the call WebSocket)
   are context the model needs (see the scenario evaluation below). Caller speech keeps priority on the shared
   Whisper server: in a live run with the senior's speaker looped back into the microphone (3 calls, 22 caller and
   30 senior segments) the caller's Whisper latency stayed at 0.94 s median with at most 0.74 s queueing, and all
-  30 echo segments were dropped. **[designed; measured with `smoke_call.py --echo-gain 0.7` on synthetic TTS
-  audio, not on a real phone]**
+  30 echo segments were dropped. **[measured with `smoke_call.py --echo-gain 0.7` on synthetic TTS audio]** On
+  the real phone (Samsung S21+), one live call had 17 senior segments dropped as echo and 3 trimmed. **[run
+  live]**
 
 ## Privacy and data protection
 
@@ -83,7 +97,7 @@ senior's microphone (senior app, PCM16 16 kHz over the call WebSocket)
   service. **[designed; backend logs carry call ids, scores, categories and error types only]**
 - **What is stored**: a short alert summary per analysed call (time, masked number, max risk score, scam type,
   outcome, which actions ran), in memory only (last 50), for the operator console. No transcript text. Phone
-  numbers are masked in logs and on the console. **[designed]** The live console stream shows transcript lines
+  numbers are masked in logs and on the console. **[run live]** The live console stream shows transcript lines
   while a call is running; they are not stored or logged.
 - **Transparency to the caller**: before the call is connected the caller hears that the call is protected and
   checked for fraud in real time and is not recorded (`server/app/prompts.py`, PL and EN).
@@ -109,7 +123,7 @@ senior's microphone (senior app, PCM16 16 kHz over the call WebSocket)
 
 300 synthetic call transcripts (`scenarios/`, 180 PL / 120 EN, 150 scams / 150 normal calls, 115 of the normal
 calls are hard negatives such as a grandson really borrowing money or a real bank calling about a card).
-Each system reads the whole transcript once; warn ≥ 50, hang-up ≥ 90.
+Each system reads the whole transcript once (no smoothing); warn ≥ 50, hang-up ≥ 90 on the system's score.
 
 | system | precision (warn) | recall (warn) | false-positive rate (warn) | recall (hang-up) | FPR (hang-up) | scam type correct | latency p50 |
 |---|---|---|---|---|---|---|---|
@@ -118,9 +132,12 @@ Each system reads the whole transcript once; warn ≥ 50, hang-up ≥ 90.
 | basal-1.0-1.5B only | 0.98 | 0.90 | 0.02 | 0.40 | 0.01 | 76% | 0.36 s |
 | **max(basal-4.5B, rules)** (what the backend does) | 0.93 | **1.00** | 0.07 | 0.94 | 0.02 | 93% | ≈ 1.1 s |
 
-Since 4 Oct the backend warns on max(model, rules) but lets only the model's own score reach the hang-up path
-(see below), so for hang-up the "basal-1.0-4.5B only" row (recall 0.89, FPR 0.01) is the closer estimate; the
-evaluation was not re-run for this change.
+Which policy the hang-up columns measure: the max(basal-4.5B, rules) row lets the rules reach a hang-up, which
+the backend no longer does. The backend today warns on max(model, rules) but hangs up only when the **model's**
+score is ≥ 90 **and** secrecy ≥ 0.8, a rule hit or money ≥ 0.5 backs it. The closest measured policy is
+"hang-up: model ≥ 90 (rules can only warn)" in `RESULTS.md` (= the "basal-1.0-4.5B only" row: recall 0.89,
+FPR 0.01, 1 false hang-up in 150 normal calls). The extra backing condition can only remove hang-ups, so for
+the current gate this recall and FPR are upper bounds; the evaluation was not re-run for the exact gate.
 
 Findings that shaped the design:
 
@@ -129,18 +146,20 @@ Findings that shaped the design:
 - **Context from the senior matters**: if only the caller's turns are analysed, the false-warning rate rises
   from 7% to 26% (a relative asking to borrow money looks like a scam without the senior's "same account as
   always?"). These numbers are from the offline evaluation on synthetic transcripts. **[verified on synthetic
-  data]** The backend now transcribes the senior's side too **[designed]**; the live effect on false warnings has
-  not been measured.
+  data]** The backend now transcribes the senior's side too **[run live]**; the effect on false warnings in real
+  calls has not been measured.
 - Regex rules cannot read negation ("the bank never asks for BLIK codes" scores 90), so rules alone may warn but
-  never hang up: the hang-up path needs the model's own score ≥ 90 twice in a row. With the model down the
-  engine reaches at most a warning. **[designed, unit-tested in `server/tests/test_engine.py`]**
+  never hang up: the hang-up path needs the model's own score ≥ 90 twice in a row (plus secrecy, money or a rule
+  hit). With the model down the engine reaches at most a warning. **[unit-tested in
+  `server/tests/test_engine.py`, run live]**
 - The 1.5B model is a fallback only: its scores are compressed (hang-up recall 0.40 at the same threshold).
 
 Turn-by-turn replay (64-call subset, the model reads the transcript after every turn, server smoothing): every
 scam got a warning, at a median of ~12 s of speech (p90 40 s), and 29/32 reached the hang-up path (median 22 s);
 4 of 32 normal calls got a false warning mid-call (a neighbour or a courier mentioning money, before the context
 made it harmless) and none was hung up on. With caller-only transcripts, 1 of 32 normal calls (a courier collecting
-cash on delivery) would have been hung up on. **[verified on synthetic data]**
+cash on delivery) would have been hung up on. **[verified on synthetic data]** The replay used the earlier
+hang-up rule (two combined readings ≥ 90), not today's model-only gate.
 
 Details, per-family results, failure examples by id and the exact commands: `server/bench/eval/RESULTS.md`.
 
@@ -155,8 +174,9 @@ Details, per-family results, failure examples by id and the exact commands: `ser
   text-based (similarity to what the speaker just played), so a senior who repeats the caller word for word
   ("30 thousand in cash?") within 15 s is dropped as echo. Senior speech that overlaps long caller monologues
   waits for the caller and is skipped after 12 s.
-- **Demo setup.** The demo runs on a physical Android phone with a browser page playing the caller (no real
-  telephony; Twilio in dry-run). Audio routing and echo on other phones may differ.
+- **Demo setup.** The demo runs on a physical Android phone (Samsung S21+) with a browser page on an iPhone
+  playing the caller (recorded scripts in the team's own voices, or live speech); no real telephony, Twilio in
+  dry-run. Audio routing and echo on other phones may differ.
 - **Short windows.** The model sees the last 60 s; a slow scam that sets up trust over several minutes is only
   judged on its latest part.
 - **Thresholds were not tuned on held-out data.** The evaluation and any threshold proposal use the same 300
@@ -170,14 +190,16 @@ Details, per-family results, failure examples by id and the exact commands: `ser
 
 | failure | behaviour | status |
 |---|---|---|
-| basal timeout (2–3 s), HTTP error, malformed or out-of-range answer | logged as `decision_fallback_to_rules`; that reading uses the rules only | designed (`server/app/risk/engine.py`, unit-tested on the server branch) |
-| Whisper error or timeout | logged (`stt_failed`), audio keeps flowing, session marked degraded; no new text, so no new escalation | designed |
-| Whisper slower than real time | per-speaker queues of 4 segments, oldest dropped (`stt_backlog_drop`); caller first; stale senior segments skipped | designed |
-| one reading spikes (misheard word, model hiccup) | at most a warning; hang-up needs two consecutive model readings ≥ 90 | designed (`smoothing.py`) |
-| decision model down for the whole call | keyword rules only: the senior can be warned, but the call is never ended automatically | designed (`engine.py`) |
-| senior app not connected / all call slots busy | **fail-open**: "protection temporarily unavailable, connecting without protection" and Twilio `<Dial>` to `SENIOR_NUMBER`; without that route (unset or dry-run) a neutral notice and the call ends; `fail_open` event on the console; app shows "protection unavailable" | designed (dial path not tested with a real call) |
+| basal timeout (3 s), HTTP error, malformed or out-of-range answer | logged as `decision_fallback_to_rules`; that reading uses the rules only and breaks the model's hang-up streak | built, unit-tested (`server/app/risk/engine.py`) |
+| Whisper error or timeout | logged (`stt_failed`), audio keeps flowing, session marked degraded; no new text, so no new escalation | built, unit-tested |
+| Whisper slower than real time | per-speaker queues of 4 segments, oldest dropped (`stt_backlog_drop`); caller first; stale senior segments skipped | built, unit-tested |
+| one reading spikes (misheard word, model hiccup) | at most a warning; hang-up needs two consecutive model readings ≥ 90 plus secrecy, money or a rule hit | built (`smoothing.py`, `engine.py`) |
+| decision model down for the whole call | keyword rules only: the senior can be warned, but the call is never ended automatically | built, unit-tested (`engine.py`) |
+| senior app cannot reach the backend | app shows "Ochrona chwilowo niedostępna" (protection temporarily unavailable) and reconnects | run live (USB link dropped during a test) |
+| senior app not connected / all call slots busy | **fail-open**: "protection temporarily unavailable, connecting without protection" and Twilio `<Dial>` to `SENIOR_NUMBER`; without that route (unset or dry-run) a neutral notice and the call ends; `fail_open` event on the console | built, unit-tested (dial path not tested with a real call) |
+| no family password configured | high risk → `confirm_block`: 8 s countdown in the app with "Rozłącz teraz", then the call is blocked; a senior hang-up during high risk also counts as a block (trusted person alerted) | built, emulator + unit tests; not yet shown on the physical phone |
 | backend down entirely | Twilio fallback URL dials the senior directly (**fail-open**: calls still go through, unprotected) | planned (provider configuration) |
-| outbound alert actions | dry-run by default, allowlist, daily caps, one alert per incident | designed (`server/app/telephony/guard.py`) |
+| outbound alert actions | provider actions: dry-run by default, allowlist, daily caps, one alert per incident (`server/app/telephony/guard.py`); trusted-person SMS from the senior's phone: one per call | built; the phone SMS run live |
 
 ## Reproducing
 
