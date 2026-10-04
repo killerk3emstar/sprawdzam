@@ -140,6 +140,28 @@ Każde zdanie zaczyna się od nowej linii: po każdej linii zrób pauzę ok. 1 s
 > Okay Grandma, I won't keep you.
 > Love you, see you on Sunday.
 
+## 4a. Głosy systemu („automat” Sprawdzam)
+
+To, co mówi sama usługa ochrony. Spokojny, wyraźny, urzędowy głos, bez emocji. Jedno zdanie, krótko (3–8 s), bez długiej ciszy na początku i końcu. Importuje się tą samą komendą, tylko z nazwą komunikatu:
+
+```bash
+cd ~/Dev/HackYeah/2026/sprawdzam/server
+scripts/import_recording.sh ~/Downloads/ostrzezenie.m4a warning_pl
+```
+
+Po zaimportowaniu wszystkich **zrestartuj backend** (z katalogu repo: `scripts/demo-down.sh && scripts/demo-up.sh`), bo komunikaty są wczytywane raz. Poprzedni syntetyczny głos zostaje w `data/prompts/tts/`; żeby do niego wrócić, przenieś plik z powrotem do `data/prompts/`.
+
+| Nazwa | Kto słyszy i kiedy | Tekst do przeczytania |
+| --- | --- | --- |
+| `warning_pl` | Babcia, gdy ryzyko przekroczy 50 | Uwaga. Ta rozmowa może być próbą oszustwa. Nie przekazuj pieniędzy ani kodów BLIK i nie podawaj swoich danych. |
+| `password_pl` | Oszust i babcia, przed sprawdzeniem hasła | Ze względów bezpieczeństwa proszę podać hasło rodzinne na klawiaturze telefonu. |
+| `blocked_pl` | Oszust, tuż przed rozłączeniem | Połączenie zostało zakończone przez usługę ochrony Sprawdzam. |
+| `warning_en` | as above, English | Warning. This call may be a scam. Do not hand over money or codes, and do not share your personal details. |
+| `password_en` | | For security reasons, please enter the family password on your phone keypad. |
+| `blocked_en` | | This call has been ended by the Second Ear protection service. |
+
+Wersje EN wystarczą, jeśli pokazujecie demo po angielsku. Można zmienić słowa, ale trzymajcie sens (szczególnie: ostrzeżenie mówi, czego nie robić).
+
 ## 5. Gdy coś nie działa
 
 - `error: no such file`: sprawdź nazwę pliku w `~/Downloads` (Finder → Pobrane). Spacje w nazwie: weź ścieżkę w cudzysłów albo przeciągnij plik do okna Terminala.
