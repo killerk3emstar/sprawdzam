@@ -24,6 +24,11 @@ import androidx.core.content.ContextCompat
 class CallNotifier(private val context: Context) {
   private var riskShown = "none"
   var lang = "pl"
+  /**
+   * True while the app is on screen. Risk and result alerts are then skipped: the full-screen app already shows
+   * them, and a heads-up banner would cover the caller, timer and risk sentence at the top of the screen.
+   */
+  var inForeground: () -> Boolean = { false }
 
   init {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -98,6 +103,7 @@ class CallNotifier(private val context: Context) {
     if (level != "warn" && level != "high") return
     if (level == riskShown || (level == "warn" && riskShown == "high")) return
     riskShown = level
+    if (inForeground()) return
     if (level == "high") {
       publish(
           ID_RISK,
@@ -113,11 +119,22 @@ class CallNotifier(private val context: Context) {
     }
   }
 
+  /** confirm_block: no family password configured, the call ends in a few seconds. */
+  fun confirmBlock() {
+    riskShown = "high"
+    if (inForeground()) return
+    publish(
+        ID_RISK,
+        t("To wygląda na oszustwo", "This looks like a scam"),
+        t("Rozłączamy tę rozmowę. Nie podawaj pieniędzy ani kodów.",
+            "We are ending this call. Do not give money or codes."))
+  }
+
   fun callEnded(reason: String) {
     val nm = NotificationManagerCompat.from(context)
     nm.cancel(ID_INCOMING)
     nm.cancel(ID_RISK)
-    if (reason == "scam_blocked") {
+    if (reason == "scam_blocked" && !inForeground()) {
       publish(
           ID_RESULT,
           t("Rozłączyliśmy podejrzaną rozmowę", "We ended a suspicious call"),

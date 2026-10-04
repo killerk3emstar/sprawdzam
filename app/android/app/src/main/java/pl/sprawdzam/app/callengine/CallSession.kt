@@ -27,7 +27,8 @@ class CallSession(
   interface Listener {
     fun onRinging(callId: String)
     fun onRisk(callId: String, score: Int, level: String, scamType: String, reasons: List<String>)
-    fun onVerifyPassword(callId: String)
+    fun onVerifyPassword(callId: String, timeoutSeconds: Int)
+    fun onConfirmBlock(callId: String, seconds: Int)
     fun onCallEnded(callId: String, reason: String)
     fun onError(code: String, message: String)
   }
@@ -118,7 +119,9 @@ class CallSession(
             msg.optString("scamType", "none"),
             List(reasons.length()) { reasons.optString(it) })
       }
-      "verify_password" -> listener.onVerifyPassword(callId)
+      "verify_password" ->
+          listener.onVerifyPassword(callId, msg.optInt("timeoutSeconds", Protocol.DEFAULT_PASSWORD_TIMEOUT_S))
+      "confirm_block" -> listener.onConfirmBlock(callId, msg.optInt("seconds", Protocol.DEFAULT_CONFIRM_BLOCK_S))
       "call_ended" -> finish(msg.optString("reason", Protocol.REASON_ERROR))
       else -> Unit // unknown types are ignored (forward compatibility)
     }

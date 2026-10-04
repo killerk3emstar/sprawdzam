@@ -1,13 +1,15 @@
 /**
- * Home: one big protection status (green / amber) and a single button to settings.
+ * Home: one statement. "Jesteś chroniony" (green text on white) or, when the backend is unreachable, an amber
+ * band "Ochrona chwilowo niedostępna". Trusted person small below, settings as a quiet text link.
  * Long-press the app name for 2 s to open the developer panel.
  *
  * @format
  */
 
 import React from 'react';
-import {Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View} from 'react-native';
-import {BigButton} from '../components/BigButton';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {TextLink} from '../components/BigButton';
+import {Band, Screen} from '../components/Screen';
 import {useI18n} from '../i18n';
 import {colors, font, size} from '../theme';
 
@@ -20,54 +22,47 @@ type Props = {
 
 export function HomeScreen({protectedNow, trustedPersonName, onOpenSettings, onOpenDev}: Props): React.JSX.Element {
   const {t} = useI18n();
+  const tone = protectedNow ? 'plain' : 'amber';
+  const onBand = protectedNow ? null : styles.onColor;
   return (
-    <SafeAreaView style={styles.root}>
-      <View style={styles.inner}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <Pressable onLongPress={onOpenDev} delayLongPress={2000} accessibilityRole="header" testID="app-title">
-        <Text style={styles.appName}>{t('appName')}</Text>
-      </Pressable>
+    <Screen top={tone} testID="home-screen">
+      <Band tone={tone} style={protectedNow ? null : styles.bandDown}>
+        <Pressable onLongPress={onOpenDev} delayLongPress={2000} testID="app-title" accessibilityRole="text">
+          <Text style={[styles.appName, onBand]}>{t('appName')}</Text>
+        </Pressable>
+        <View
+          accessibilityRole="summary"
+          accessibilityLiveRegion="polite"
+          testID={protectedNow ? 'status-protected' : 'status-unavailable'}
+          style={styles.status}>
+          <Text style={[styles.title, protectedNow ? styles.ok : styles.onColor]} accessibilityRole="header">
+            {protectedNow ? t('protectedTitle') : t('unavailableTitle')}
+          </Text>
+          <Text style={[styles.text, onBand]}>{protectedNow ? t('protectedText') : t('unavailableText')}</Text>
+        </View>
+      </Band>
 
-      <View
-        style={[styles.status, protectedNow ? styles.ok : styles.down]}
-        accessibilityRole="summary"
-        accessibilityLiveRegion="polite"
-        testID={protectedNow ? 'status-protected' : 'status-unavailable'}>
-        <Text style={[styles.icon, {color: protectedNow ? colors.onGreen : colors.onAmber}]}>
-          {protectedNow ? '✓' : '!'}
-        </Text>
-        <Text style={[styles.title, {color: protectedNow ? colors.onGreen : colors.onAmber}]}>
-          {protectedNow ? t('protectedTitle') : t('unavailableTitle')}
-        </Text>
-        <Text style={[styles.text, {color: protectedNow ? colors.onGreen : colors.onAmber}]}>
-          {protectedNow ? t('protectedText') : t('unavailableText')}
-        </Text>
-      </View>
-
-      {trustedPersonName ? (
-        <Text style={styles.trusted}>
-          {t('trustedPerson')}: {trustedPersonName}
-        </Text>
-      ) : null}
+      <View style={styles.spacer} />
 
       <View style={styles.footer}>
-        <BigButton label={t('settings')} onPress={onOpenSettings} variant="neutral" testID="open-settings" />
+        <Text style={styles.trusted} testID="home-trusted">
+          {trustedPersonName ? t('trustedPersonLine', {name: trustedPersonName}) : t('noTrustedPerson')}
+        </Text>
+        <TextLink label={t('settings')} onPress={onOpenSettings} testID="open-settings" />
       </View>
-      </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, backgroundColor: colors.background},
-  inner: {flex: 1, paddingHorizontal: size.padding},
-  appName: {fontSize: font.title, fontWeight: '800', color: colors.primary, marginTop: 24, textAlign: 'center'},
-  status: {flex: 1, marginTop: 24, borderRadius: 28, padding: 28, alignItems: 'center', justifyContent: 'center'},
-  ok: {backgroundColor: colors.green},
-  down: {backgroundColor: colors.amber},
-  icon: {fontSize: 96, fontWeight: '800', lineHeight: 110},
-  title: {fontSize: font.huge, fontWeight: '800', textAlign: 'center', marginTop: 8},
-  text: {fontSize: font.body, textAlign: 'center', marginTop: 16, lineHeight: 34},
-  trusted: {fontSize: font.body, color: colors.muted, textAlign: 'center', marginTop: 16},
-  footer: {paddingVertical: 24},
+  bandDown: {paddingBottom: 48},
+  appName: {fontSize: font.small, color: colors.muted},
+  status: {marginTop: 72},
+  title: {fontSize: font.huge, lineHeight: 56, fontWeight: '700', color: colors.ink},
+  ok: {color: colors.green},
+  onColor: {color: colors.onColor},
+  text: {fontSize: font.body, lineHeight: 36, color: colors.ink, marginTop: 20, maxWidth: 520},
+  spacer: {flex: 1},
+  footer: {paddingHorizontal: size.side, paddingBottom: 24},
+  trusted: {fontSize: font.small, lineHeight: 32, color: colors.muted},
 });

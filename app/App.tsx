@@ -55,6 +55,11 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
     );
   }, [settings, onSettingsChange, askSms]);
 
+  // Opens the dialer with the number filled in (tel: is ACTION_VIEW -> dialer; no CALL_PHONE permission).
+  const callTrustedPerson = useCallback((number: string) => {
+    Linking.openURL(`tel:${number.replace(/[^0-9+]/g, '')}`).catch(() => {});
+  }, []);
+
   const syncContacts = useCallback(() => {
     CallEngine.pickWhitelistContacts().then(setWhitelistCount, () => {});
   }, []);
@@ -114,7 +119,15 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
     }
     if (call.phase === 'ended' && call.endReason) {
       const alert = engine.trustedAlert?.callId === call.callId ? engine.trustedAlert : null;
-      return <CallEndedScreen reason={call.endReason} trustedAlert={alert} onOk={engine.dismissEnded} />;
+      return (
+        <CallEndedScreen
+          reason={call.endReason}
+          trustedAlert={alert}
+          trustedPerson={settings.trustedPerson ?? null}
+          onCallTrusted={callTrustedPerson}
+          onOk={engine.dismissEnded}
+        />
+      );
     }
   }
 
@@ -139,7 +152,7 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
   if (route === 'dev') {
     return (
       <SafeAreaView style={styles.devRoot}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+        <StatusBar barStyle="dark-content" backgroundColor={colors.paper} />
         <ScrollView contentContainerStyle={styles.devContent} keyboardShouldPersistTaps="handled">
           <Pressable accessibilityRole="button" onPress={() => setRoute('home')} style={styles.devBack}>
             <Text style={styles.devBackText}>← Sprawdzam</Text>
@@ -216,12 +229,12 @@ function App(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  splash: {flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background},
-  splashText: {fontSize: font.title, fontWeight: '800', color: colors.primary},
-  devRoot: {flex: 1, backgroundColor: colors.surface},
+  splash: {flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper},
+  splashText: {fontSize: font.title, fontWeight: '700', color: colors.ink},
+  devRoot: {flex: 1, backgroundColor: colors.paper},
   devContent: {padding: 16},
   devBack: {minHeight: 56, justifyContent: 'center'},
-  devBackText: {fontSize: font.body, color: colors.primary, fontWeight: '700'},
+  devBackText: {fontSize: font.small, color: colors.ink, textDecorationLine: 'underline'},
 });
 
 export default App;

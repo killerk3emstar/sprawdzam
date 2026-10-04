@@ -6,8 +6,9 @@
  */
 
 import React, {useState} from 'react';
-import {SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View} from 'react-native';
-import {BigButton} from '../components/BigButton';
+import {ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {BigButton, TextLink} from '../components/BigButton';
+import {Screen} from '../components/Screen';
 import {useI18n, type Lang} from '../i18n';
 import {toControlUrl} from '../deepLink';
 import type {Settings} from '../settings';
@@ -34,12 +35,12 @@ export function SettingsScreen(props: Props): React.JSX.Element {
   const [url, setUrl] = useState(settings.controlUrl);
   const [token, setToken] = useState(settings.deviceToken);
   const [saved, setSaved] = useState(false);
+  const [devOpen, setDevOpen] = useState(false);
 
   const setLang = (lang: Lang) => onChange({...settings, lang});
 
   return (
-    <SafeAreaView style={styles.root} testID="settings-screen">
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <Screen testID="settings-screen">
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title} accessibilityRole="header">
           {t('settings')}
@@ -50,14 +51,16 @@ export function SettingsScreen(props: Props): React.JSX.Element {
           <BigButton
             label="Polski"
             onPress={() => setLang('pl')}
-            variant={settings.lang === 'pl' ? 'primary' : 'neutral'}
+            variant={settings.lang === 'pl' ? 'primary' : 'quiet'}
+            accessibilityHint={settings.lang === 'pl' ? t('on') : undefined}
             style={styles.flex}
             testID="lang-pl"
           />
           <BigButton
             label="English"
             onPress={() => setLang('en')}
-            variant={settings.lang === 'en' ? 'primary' : 'neutral'}
+            variant={settings.lang === 'en' ? 'primary' : 'quiet'}
+            accessibilityHint={settings.lang === 'en' ? t('on') : undefined}
             style={styles.flex}
             testID="lang-en"
           />
@@ -68,7 +71,7 @@ export function SettingsScreen(props: Props): React.JSX.Element {
           {settings.trustedPerson ? `${settings.trustedPerson.name}\n${settings.trustedPerson.number}` : t('notChosen')}
         </Text>
         {props.onPickTrustedPerson ? (
-          <BigButton label={t('chooseFromContacts')} onPress={props.onPickTrustedPerson} variant="neutral" />
+          <BigButton label={t('chooseFromContacts')} onPress={props.onPickTrustedPerson} variant="quiet" />
         ) : null}
         {props.smsAllowed === true ? (
           <Text style={[styles.value, styles.spaced]} testID="sms-permission-on">
@@ -78,7 +81,7 @@ export function SettingsScreen(props: Props): React.JSX.Element {
           <BigButton
             label={t('smsPermissionOff')}
             onPress={props.onAllowSms}
-            variant="neutral"
+            variant="quiet"
             style={styles.spaced}
             testID="allow-sms"
           />
@@ -89,17 +92,21 @@ export function SettingsScreen(props: Props): React.JSX.Element {
           <Text style={styles.value}>{t('whitelistCount', {n: whitelistCount})}</Text>
         ) : null}
         {props.onSyncContacts ? (
-          <BigButton label={t('syncContacts')} onPress={props.onSyncContacts} variant="neutral" />
+          <BigButton label={t('syncContacts')} onPress={props.onSyncContacts} variant="quiet" />
         ) : null}
 
         <Text style={styles.section}>{t('notifications')}</Text>
         {notificationsEnabled ? (
           <Text style={styles.value}>{t('notificationsOn')}</Text>
         ) : (
-          <BigButton label={t('enableNotifications')} onPress={props.onEnableNotifications} variant="neutral" />
+          <BigButton label={t('enableNotifications')} onPress={props.onEnableNotifications} variant="quiet" />
         )}
 
-        <Text style={styles.section}>{t('developer')}</Text>
+        <View style={styles.devToggle}>
+          <TextLink label={t('developer')} onPress={() => setDevOpen(o => !o)} testID="toggle-dev" />
+        </View>
+        {devOpen ? (
+          <>
         <Text style={styles.label}>{t('backendUrl')}</Text>
         <TextInput
           style={styles.input}
@@ -134,43 +141,45 @@ export function SettingsScreen(props: Props): React.JSX.Element {
             onChange({...settings, controlUrl, deviceToken: token.trim()});
             setSaved(true);
           }}
-          variant="neutral"
+          variant="quiet"
           style={styles.spaced}
         />
         <Text style={styles.label}>{t('systemCallUi')}</Text>
         <BigButton
           label={settings.systemCallUi ? t('on') : t('off')}
           onPress={() => onChange({...settings, systemCallUi: !settings.systemCallUi})}
-          variant={settings.systemCallUi ? 'primary' : 'neutral'}
+          variant={settings.systemCallUi ? 'primary' : 'quiet'}
           testID="toggle-system-call-ui"
         />
-        <BigButton label={t('devPanel')} onPress={props.onOpenDev} variant="neutral" style={styles.spaced} />
+        <BigButton label={t('devPanel')} onPress={props.onOpenDev} variant="quiet" style={styles.spaced} />
+          </>
+        ) : null}
       </ScrollView>
       <View style={styles.footer}>
         <BigButton label={t('back')} onPress={onBack} testID="settings-back" />
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, backgroundColor: colors.background},
-  content: {paddingHorizontal: size.padding, paddingBottom: 24},
-  title: {fontSize: font.title, fontWeight: '800', color: colors.text, marginTop: 24},
-  section: {fontSize: font.large, fontWeight: '800', color: colors.text, marginTop: 28, marginBottom: 12},
+  content: {paddingHorizontal: size.side, paddingBottom: 32},
+  title: {fontSize: font.title, lineHeight: 50, fontWeight: '700', color: colors.ink, marginTop: 28},
+  section: {fontSize: font.body, fontWeight: '700', color: colors.ink, marginTop: 40, marginBottom: 12},
   row: {flexDirection: 'row', gap: size.gap},
   flex: {flex: 1},
-  value: {fontSize: font.body, color: colors.muted, marginBottom: 12, lineHeight: 34},
-  label: {fontSize: font.body, color: colors.muted, marginTop: 8, marginBottom: 6},
+  value: {fontSize: font.small, color: colors.muted, marginBottom: 12, lineHeight: 32},
+  label: {fontSize: font.small, color: colors.muted, marginTop: 12, marginBottom: 6},
   input: {
     minHeight: 64,
     borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: 14,
+    borderColor: colors.muted,
+    borderRadius: size.radius,
     paddingHorizontal: 14,
-    fontSize: font.body,
-    color: colors.text,
+    fontSize: font.small,
+    color: colors.ink,
   },
   spaced: {marginTop: 16},
-  footer: {paddingHorizontal: size.padding, paddingVertical: 16},
+  devToggle: {marginTop: 40},
+  footer: {paddingHorizontal: size.side, paddingTop: 8, paddingBottom: 24},
 });

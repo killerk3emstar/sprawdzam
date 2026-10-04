@@ -5,6 +5,8 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   CallEngine,
+  DEFAULT_CONFIRM_BLOCK_S,
+  DEFAULT_PASSWORD_TIMEOUT_S,
   isCallEngineAvailable,
   type ProtectionStatus,
   type RiskUpdate,
@@ -21,6 +23,10 @@ export type CallView = {
   risk: RiskUpdate | null;
   passwordRequested: boolean;
   passwordSent: boolean;
+  /** Epoch ms when the backend stops waiting for the family password (verify_password.timeoutSeconds). */
+  passwordDeadline: number | null;
+  /** Epoch ms when the backend ends the call (confirm_block, no family password configured). */
+  blockDeadline: number | null;
   endReason: string | null;
   error: string | null;
 };
@@ -33,6 +39,8 @@ export const IDLE_CALL: CallView = {
   risk: null,
   passwordRequested: false,
   passwordSent: false,
+  passwordDeadline: null,
+  blockDeadline: null,
   endReason: null,
   error: null,
 };
@@ -50,6 +58,10 @@ export type CallEngineState = {
   enterPasswordAgain: () => void;
   dismissEnded: () => void;
 };
+
+function seconds(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.min(value, 120) : fallback;
+}
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -79,7 +91,21 @@ export function useCallEngine(controlUrl: string, deviceToken: string): CallEngi
       CallEngine.addListener('risk', r => setCall(prev => (prev.callId === r.callId ? {...prev, risk: r} : prev))),
       CallEngine.addListener('verifyPassword', v =>
         setCall(prev =>
-          prev.callId === v.callId ? {...prev, passwordRequested: true, passwordSent: false} : prev,
+          prev.callId === v.callId
+            ? {
+                ...prev,
+                passwordRequested: true,
+                passwordSent: false,
+                passwordDeadline: Date.now() + seconds(v.timeoutSeconds, DEFAULT_PASSWORD_TIMEOUT_S) * 1000,
+              }
+            : prev,
+        ),
+      ),
+      CallEngine.addListener('confirmBlock', b =>
+        setCall(prev =>
+          prev.callId === b.callId && prev.blockDeadline === null
+            ? {...prev, blockDeadline: Date.now() + seconds(b.seconds, DEFAULT_CONFIRM_BLOCK_S) * 1000}
+            : prev,
         ),
       ),
       CallEngine.addListener('callEnded', e =>
@@ -91,7 +117,10 @@ export function useCallEngine(controlUrl: string, deviceToken: string): CallEngi
           if (prev.phase === 'ringing' && e.reason === 'senior_hangup') {
             return IDLE_CALL;
           }
-          return {...prev, phase: 'ended', endReason: e.reason};
+          // Hanging up from the "this looks like a scam" screen is a blocked scam even if the backend's
+          // call_ended(scam_blocked) did not arrive within the hang-up grace period.
+          const reason = prev.blockDeadline !== null && e.reason === 'senior_hangup' ? 'scam_blocked' : e.reason;
+          return {...prev, phase: 'ended', endReason: reason};
         }),
       ),
     ];
