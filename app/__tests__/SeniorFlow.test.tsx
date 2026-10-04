@@ -86,7 +86,9 @@ test('senior flow from incoming call to blocked scam', async () => {
 
   await emit(EV.callEnded, {callId: 'c1', reason: 'scam_blocked'});
   expect(text(r)).toContain('We ended a suspicious call');
-  expect(text(r)).toContain('Your trusted person has been informed.');
+  expect(text(r)).toContain('Do not call this number back.');
+  await emit(EV.trustedAlert, {callId: 'c1', sent: true, error: null, name: 'Anna'});
+  expect(text(r)).toContain('Text message sent to: Anna');
 
   await press(r, 'ended-ok');
   expect(text(r)).toContain('You are protected');
