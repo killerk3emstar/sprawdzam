@@ -92,10 +92,14 @@ async def create_dev_call(body: DevCallRequest, request: Request) -> JSONRespons
     call_id = "CA" + secrets.token_hex(16)
     result = admit_call(services, call_id, body.caller, lang)
     if result.outcome is not AdmitOutcome.ADMITTED or result.token is None:
+        # Fail-open: a real call would be connected to the senior unprotected; the dev path
+        # has no phone to connect to, so it reports what the caller would hear.
+        services.events.action(call_id, "fail_open", f"{result.outcome.value}: dev caller")
         return JSONResponse(
             {
                 "error": "protection_unavailable",
                 "reason": result.outcome.value,
+                "failOpen": True,
                 "message": PROTECTION_UNAVAILABLE[lang],
             },
             status_code=503,

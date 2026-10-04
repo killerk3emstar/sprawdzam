@@ -46,6 +46,8 @@ def test_dev_call_without_app_is_unavailable(make_client, make_settings):
     assert response.status_code == 503
     assert response.json()["reason"] == "no_app"
     assert "chwilowo niedostępna" in response.json()["message"]
+    assert response.json()["failOpen"] is True
+    assert "zadzwonić później" not in response.json()["message"]
 
 
 def test_dev_call_validation_and_rate_limit(make_client, make_settings):

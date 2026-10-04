@@ -1,5 +1,7 @@
 import xml.etree.ElementTree as ET
 
+import pytest
+
 from tests.conftest import (
     AUTH_TOKEN,
     BASE_URL,
@@ -192,3 +194,38 @@ def test_models_are_warmed_up_at_startup(make_client):
     assert data["stt"]["warmup"] == "ok" and data["stt"]["latency_ms"] == 12
     assert data["decision"]["warmup"] == "failed"
     assert "basal down" in data["decision"]["error"]
+
+
+SENIOR = "+48600700800"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "route"),
+    [
+        ({}, "none"),
+        ({"SENIOR_NUMBER": SENIOR}, "not_allowlisted"),
+        ({"SENIOR_NUMBER": SENIOR, "OUTBOUND_ALLOWLIST": SENIOR}, "dry_run"),
+        (
+            {"SENIOR_NUMBER": SENIOR, "OUTBOUND_ALLOWLIST": SENIOR, "TELEPHONY_DRY_RUN": False},
+            "dial",
+        ),
+    ],
+)
+def test_fail_open_dials_the_senior_only_when_configured_and_live(
+    make_client, make_settings, overrides, route, caplog
+):
+    client = make_client(make_settings(**overrides), app_online=False)
+    sub = client.app.state.services.events.subscribe()
+    root = ET.fromstring(post_voice(client, voice_params()).text)
+    say = root.find("Say").text
+    assert "Proszę zadzwonić później" not in say and "chwilowo niedostępna" in say
+    if route == "dial":
+        assert root.find("Dial").text == SENIOR and root.find("Hangup") is None
+        assert "Łączę bez ochrony" in say
+    else:
+        assert root.find("Dial") is None and root.find("Hangup") is not None
+    assert any(f'"route": "{route}"' in r.getMessage() for r in caplog.records)
+    events = [sub.queue.get_nowait() for _ in range(sub.queue.qsize())]
+    action = [e for e in events if e["type"] == "action"][0]
+    assert action["action"] == "fail_open" and action["detail"] == f"no_app: route={route}"
+    assert SENIOR not in caplog.text

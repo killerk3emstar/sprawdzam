@@ -3,7 +3,10 @@
 Order of checks: content type -> body size -> provider signature -> rate limit -> call
 fields -> senior app online -> concurrency slot. On success the markup plays the protection
 notice and connects the call audio to our media stream WebSocket. Without an app online or
-a free slot the caller hears "protection temporarily unavailable" and the call ends.
+a free slot the call fails open (`fail_open_route`): the caller hears "protection temporarily
+unavailable, connecting without protection" and is dialled through to SENIOR_NUMBER. In
+dry-run mode, or without a SENIOR_NUMBER on the allowlist, there is no route: the caller
+hears a neutral "protection temporarily unavailable" and the call ends.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from starlette.datastructures import FormData
 from app.calls.intake import AdmitOutcome, admit_call
 from app.config import Lang
 from app.logging_setup import log_event
-from app.services import get_services
+from app.services import Services, get_services
 from app.telephony.provider import InvalidWebhook, WebhookForbidden
 
 logger = logging.getLogger(__name__)
@@ -41,6 +44,25 @@ async def _read_limited(request: Request, limit: int) -> bytes:
         if len(body) > limit:
             raise _BodyTooLarge
     return bytes(body)
+
+
+def fail_open_route(services: Services, call_id: str, reason: str) -> str | None:
+    """The senior's own number to connect an unprotected call to, or None (no route)."""
+    settings = services.settings
+    number = settings.SENIOR_NUMBER
+    if not number:
+        route = "none"
+    elif number not in settings.outbound_allowlist:
+        route = "not_allowlisted"
+    elif settings.TELEPHONY_DRY_RUN:
+        route = "dry_run"
+    else:
+        route = "dial"
+    log_event(
+        logger, logging.WARNING, "fail_open_route", call_id=call_id, reason=reason, route=route
+    )
+    services.events.action(call_id, "fail_open", f"{reason}: route={route}")
+    return number if route == "dial" else None
 
 
 async def incoming_call(request: Request) -> Response:
@@ -93,7 +115,8 @@ async def incoming_call(request: Request) -> Response:
     lang: Lang = services.hub.lang(settings.DEFAULT_LANG)
     result = admit_call(services, call.call_id, call.caller, lang)
     if result.outcome is not AdmitOutcome.ADMITTED or result.token is None:
-        markup = provider.unavailable_markup(lang)
+        dial_to = fail_open_route(services, call.call_id, result.outcome.value)
+        markup = provider.unavailable_markup(lang, dial_to)
     else:
         stream_url = settings.ws_url(f"/{provider.name}/stream")
         # Contacts on the senior's whitelist are not analysed, so they get no notice.

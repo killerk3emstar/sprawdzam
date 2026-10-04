@@ -119,8 +119,9 @@ class TelephonyProvider(Protocol):
         connect the call audio to our media stream WebSocket."""
         ...
 
-    def unavailable_markup(self, lang: Lang) -> str:
-        """'Protection temporarily unavailable', then hang up."""
+    def unavailable_markup(self, lang: Lang, dial_to: str | None = None) -> str:
+        """Fail-open: 'protection temporarily unavailable', then connect the caller straight
+        to `dial_to` (the senior's own number) or, without a route, end the call."""
         ...
 
     # ---- media stream

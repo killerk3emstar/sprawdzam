@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     OUTBOUND_ALLOWLIST: str = ""
     # Trusted person alerted on high risk (E.164; must also be on OUTBOUND_ALLOWLIST).
     TRUSTED_PERSON_NUMBER: str = ""
+    # Fail-open route: the senior's real phone number (E.164, must be on OUTBOUND_ALLOWLIST).
+    # When protection is unavailable the provider connects the caller straight to it
+    # (Twilio <Dial>) instead of ending the call; only when TELEPHONY_DRY_RUN is false.
+    SENIOR_NUMBER: str = ""
     MAX_OUTBOUND_CALLS_PER_DAY: int = Field(default=10, ge=0, le=1000)
     MAX_SMS_PER_DAY: int = Field(default=20, ge=0, le=1000)
     MAX_CONCURRENT_CALLS: int = Field(default=2, ge=1, le=100)
@@ -125,7 +129,7 @@ class Settings(BaseSettings):
     def _lower_backend(cls, value: object) -> object:
         return value.strip().lower() if isinstance(value, str) else value
 
-    @field_validator("TWILIO_NUMBER", "TRUSTED_PERSON_NUMBER")
+    @field_validator("TWILIO_NUMBER", "TRUSTED_PERSON_NUMBER", "SENIOR_NUMBER")
     @classmethod
     def _check_e164(cls, value: str) -> str:
         value = value.strip().replace(" ", "")

@@ -15,9 +15,17 @@ PROTECTION_NOTICE: dict[Lang, str] = {
     ),
 }
 
+# Fail-open: when protection is unavailable (no senior app connected, all call slots busy)
+# the call is meant to go through to the senior unprotected, never to be refused.
 PROTECTION_UNAVAILABLE: dict[Lang, str] = {
-    "pl": "Usługa ochrony połączeń jest chwilowo niedostępna. Proszę zadzwonić później.",
-    "en": "The call protection service is temporarily unavailable. Please call again later.",
+    "pl": "Usługa ochrony jest chwilowo niedostępna. Łączę bez ochrony.",
+    "en": "The protection service is temporarily unavailable. Connecting you without protection.",
+}
+# Used only when there is no number to connect to (SENIOR_NUMBER unset, or dry-run): neutral,
+# no "call again later".
+PROTECTION_UNAVAILABLE_NO_ROUTE: dict[Lang, str] = {
+    "pl": "Usługa ochrony jest chwilowo niedostępna.",
+    "en": "The protection service is temporarily unavailable.",
 }
 
 # Pre-recorded voice prompts played through the media stream (generated locally by
