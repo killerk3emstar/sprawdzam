@@ -5,34 +5,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sprawdzam demo</title>
 <style>
-:root { --font: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif; --mono: ui-monospace, "SF Mono", Menlo, monospace;
-        --bg: #0b0f15; --panel: #131a23; --line: #263140; --fg: #f1f5f9; --muted: #94a3b8; --accent: #60a5fa; }
+:root { --font: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif;
+        --bg: #F7F7F5; --fg: #111; --muted: #6A6A66; --faint: #A3A39E; --line: #DCDCD7; --warn: #A15C00; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--fg); }
-body { font: 17px/1.45 var(--font); }
-main { max-width: 980px; margin: 0 auto; padding: 32px 16px; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-h1 { margin: 0; font-size: 1.7rem; }
-h1 small { display: block; color: var(--muted); font-size: .9rem; font-weight: 500; }
-.lang { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-.lang button { background: none; border: 0; padding: 8px 14px; color: var(--muted); font: 700 .85rem var(--font); cursor: pointer; }
-.lang button.on { background: #1b2430; color: var(--fg); }
-.grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 24px; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
-.links { display: grid; gap: 10px; }
-.links a { display: block; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; color: var(--fg); text-decoration: none; }
-.links a:hover { border-color: var(--accent); }
-.links b { display: block; font-size: 1.1rem; }
-.links span { color: var(--muted); font-size: .9rem; }
-.links code { color: var(--accent); font: .85rem var(--mono); }
-.qr { display: grid; justify-items: center; gap: 12px; text-align: center; }
-.qr #qr { width: min(100%, 300px); aspect-ratio: 1; background: #fff; border-radius: 12px; padding: 12px; }
+body { font: 17px/1.45 var(--font); -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+main { max-width: 1040px; margin: 0 auto; padding: 56px 24px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: -.01em; }
+h1 small { display: block; color: var(--muted); font-size: 1rem; font-weight: 400; letter-spacing: 0; margin-top: 2px; }
+.lang { display: flex; gap: 4px; }
+.lang button { background: none; border: 0; padding: 8px; min-width: 40px; color: var(--faint); font: .9rem var(--font); cursor: pointer; }
+.lang button.on { color: var(--fg); font-weight: 600; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 64px; margin-top: 40px; }
+.links { border-top: 1px solid var(--fg); }
+.links a { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; padding: 16px 0; border-bottom: 1px solid var(--line);
+           color: var(--fg); text-decoration: none; }
+.links a:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.links b { font-size: 1.15rem; font-weight: 600; }
+.links span { color: var(--muted); font-size: .95rem; grid-column: 1; }
+.links code { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--muted); font: .9rem var(--font); }
+.hint { color: var(--muted); font-size: .9rem; margin: 16px 0 0; }
+.qr { display: grid; gap: 14px; align-content: start; }
+.qr b { font-weight: 600; font-size: 1.15rem; }
+.qr #qr { width: min(100%, 300px); aspect-ratio: 1; background: #fff; border: 1px solid var(--line); padding: 10px; }
 .qr #qr svg { width: 100%; height: 100%; display: block; }
-label { display: grid; gap: 6px; color: var(--muted); font-size: .85rem; width: 100%; text-align: left; }
-input { font: 16px var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; }
-.hint { color: var(--muted); font-size: .85rem; margin: 0; }
-.url { font: .95rem var(--mono); color: var(--accent); word-break: break-all; }
-@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+label { display: grid; gap: 6px; color: var(--muted); font-size: .9rem; }
+input { font: 16px var(--font); color: var(--fg); background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; width: 100%; }
+.url { font-size: .95rem; color: var(--fg); word-break: break-all; }
+#localHint { color: var(--warn); margin: 0; }
+@media (max-width: 760px) { main { padding: 32px 16px; } .grid { grid-template-columns: 1fr; gap: 40px; } }
 </style>
 </head>
 <body>
@@ -42,15 +45,17 @@ input { font: 16px var(--mono); color: var(--fg); background: var(--bg); border:
     <div class="lang"><button type="button" data-lang="pl">PL</button><button type="button" data-lang="en">EN</button></div>
   </header>
   <div class="grid">
-    <div class="panel links">
-      <a href="/dev/caller"><b data-i18n="caller"></b><span data-i18n="callerSub"></span> <code>/dev/caller</code></a>
-      <a href="/dev/jury"><b data-i18n="jury"></b><span data-i18n="jurySub"></span> <code>/dev/jury</code></a>
-      <a href="/dev/jury?mock=1"><b data-i18n="mock"></b><span data-i18n="mockSub"></span> <code>/dev/jury?mock=1</code></a>
-      <a href="/dev/jury?tab=operator"><b data-i18n="operator"></b><span data-i18n="operatorSub"></span> <code>/dev/jury?tab=operator</code></a>
-      <a href="/dev/senior"><b data-i18n="senior"></b><span data-i18n="seniorSub"></span> <code>/dev/senior</code></a>
+    <div>
+      <nav class="links">
+        <a href="/dev/caller"><b data-i18n="caller"></b><span data-i18n="callerSub"></span><code>/dev/caller</code></a>
+        <a href="/dev/jury"><b data-i18n="jury"></b><span data-i18n="jurySub"></span><code>/dev/jury</code></a>
+        <a href="/dev/jury?mock=1"><b data-i18n="mock"></b><span data-i18n="mockSub"></span><code>/dev/jury?mock=1</code></a>
+        <a href="/dev/jury?tab=operator"><b data-i18n="operator"></b><span data-i18n="operatorSub"></span><code>/dev/jury?tab=operator</code></a>
+        <a href="/dev/senior"><b data-i18n="senior"></b><span data-i18n="seniorSub"></span><code>/dev/senior</code></a>
+      </nav>
       <p class="hint"><span data-i18n="current"></span> <span class="url" id="here"></span></p>
     </div>
-    <div class="panel qr">
+    <div class="qr">
       <b data-i18n="qrTitle"></b>
       <div id="qr" role="img" aria-label="QR"></div>
       <div class="url" id="target"></div>
@@ -67,7 +72,7 @@ const T = {
   pl: {
     sub: "Strony demonstracyjne", caller: "Symulator sieci operatora", callerSub: "Telefon oszusta (iPhone, Safari).",
     jury: "Konsola dla jury", jurySub: "Ekran na projektor: transkrypcja, ryzyko, działania.",
-    mock: "Konsola: tryb demo", mockSub: "Odtwarza przykładową rozmowę bez backendu.",
+    mock: "Konsola w trybie demo", mockSub: "Odtwarza przykładową rozmowę bez backendu.",
     operator: "Panel operatora", operatorSub: "Alerty bez treści rozmów.",
     senior: "Aplikacja seniora w przeglądarce", seniorSub: "Zastępuje apkę na Androidzie.",
     current: "Ta strona:", qrTitle: "Zeskanuj iPhonem (oszust)", base: "Adres publiczny (tunel)",
@@ -76,7 +81,7 @@ const T = {
   en: {
     sub: "Demo pages", caller: "Operator network simulator", callerSub: "The scammer's phone (iPhone, Safari).",
     jury: "Jury console", jurySub: "Projector screen: transcript, risk, actions.",
-    mock: "Console: demo mode", mockSub: "Replays a sample call without the backend.",
+    mock: "Console in demo mode", mockSub: "Replays a sample call without the backend.",
     operator: "Operator console", operatorSub: "Alerts without any call content.",
     senior: "Senior app in the browser", seniorSub: "Stands in for the Android app.",
     current: "This page:", qrTitle: "Scan with the iPhone (scammer)", base: "Public address (tunnel)",
