@@ -8,6 +8,7 @@ Wszystkie polecenia uruchamiamy w katalogu repo: `cd ~/Dev/HackYeah/2026/sprawdz
 - [ ] Wszystko naładowane, Mac na zasilaczu (modele mocno grzeją), kabel USB-C do Samsunga i kabel do iPhone'a 1 (pokazywanie ekranu).
 - [ ] Mac i iPhone 1 mają internet (hotspot albo Wi-Fi sali). Samsung internetu **nie potrzebuje**: łączy się z Makiem przez kabel. SMS idzie przez sieć komórkową.
 - [ ] Samsung: apka zainstalowana (`app/scripts/install-demo-android.sh --serial RFCNC0JPWDM`), w ustawieniach apki osoba zaufana = „Wnuczka TEST”, zgoda na SMS. Wygaszanie ekranu: 10 min, tryb „Nie przeszkadzać” wyłączony, głośność rozmowy ok. 60%.
+- [ ] Token urządzenia: w `server/.env.dev` ustaw losowy `APP_DEVICE_TOKEN` (`openssl rand -hex 16`), nie domyślny z repo (tunel jest publiczny), i przekaż go apce: `adb -s RFCNC0JPWDM shell am start -a android.intent.action.VIEW -d "'sprawdzam://config?url=ws://localhost:8765/app/control&token=<TOKEN>'" pl.sprawdzam.app`.
 - [ ] iPhone 2: dźwięk SMS włączony, telefon pod ręką, żeby pokazać wiadomość.
 - [ ] Wasze nagrania głosu zaimportowane (`server/scripts/samples/NAGRANIA.md`) i każde raz przepuszczone przez system.
 - [ ] Nagrane wideo demo (plan B), patrz punkt 6.
