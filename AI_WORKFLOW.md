@@ -47,6 +47,7 @@ Claude Code runs as a coordinator in the main checkout and delegates independent
 | Backend skeleton | `sprawdzam-server` / `feat/server-skeleton` | FastAPI app: Twilio webhook with signature check, Media Streams WebSocket, μ-law decoding, PL/EN keyword rules, smoothing, model fallback, tests; all external services behind interfaces with fakes |
 | App | `sprawdzam-app` / `feat/app-rnoh` | React Native 0.77.1 + RNOH 0.77.75 project, HarmonyOS container with API 20 minimum / API 24 target, CLI build of the HAP |
 | Models | `sprawdzam-models` / `feat/model-bench` | Download and serve Whisper large-v3-turbo (whisper.cpp) and basal-1 on Apple Silicon, measure latency and answers on synthetic PL/EN calls, document the HTTP APIs |
+| Demo backend (4 Oct) | `sprawdzam-server` / `feat/demo-server` | Rules alone may warn but never hang up; trusted-person SMS requested from the senior's phone (`alert_trusted`); live event stream for the operator console (`/dev/events`); transcription of the senior's side with an echo guard; fail-open wording and `<Dial>` route |
 
 Sub-agents commit but never push or merge. The coordinator reviews each report and diff, and the team merges feature branches into `main` themselves (on 4 Oct the team asked the coordinator to merge the three feature branches after a conflict check).
 
@@ -57,6 +58,8 @@ After the first end-to-end runs the team narrowed the submission to the Defence 
 ### Testing and debugging
 
 [Record builds, linting, tests, device/emulator runs, UI inspection, logs, screenshots, and manual checks.]
+
+- Demo backend (4 Oct, sub-agent): `uv run pytest` (unit + integration tests with fake STT, decision model and app sockets) and `ruff check`; then live calls against a separate dev backend with the real Whisper and basal servers using `server/scripts/smoke_call.py` (PL police scam, PL family call, EN bank scam): event stream, one `alert_trusted` per blocked call, and an echo test that loops the caller audio back into the "senior microphone". The first echo-guard version let our own voice prompts and late-transcribed segments through; fixed by adding prompts as references and measuring the window from capture time, then 30/30 echo segments were dropped in the re-run.
 
 ## Unsuccessful approaches
 
