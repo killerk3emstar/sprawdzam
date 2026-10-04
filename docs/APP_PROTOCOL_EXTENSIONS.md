@@ -25,3 +25,41 @@ before the backend implements them. Changes must be agreed by both sides.
 Why the picker: on HarmonyOS `ohos.permission.READ_CONTACTS` is a `system_basic` (ACL-restricted) permission.
 The contact picker (`contact.selectContacts`) needs no permission and only returns the contacts the user
 selects.
+
+## `alert_trusted` / `alert_trusted_result` (control channel, Android app)
+
+The senior's own phone texts the trusted person, so the SMS comes from a number the family knows and no SMS
+provider is needed.
+
+Backend → app:
+
+```json
+{"type": "alert_trusted", "callId": "CA…", "scamType": "police", "reasons": ["authority", "money"], "lang": "pl",
+ "text": "Sprawdzam: babcia mogla rozmawiac z oszustem (falszywy policjant, prosba o gotowke). Zadzwon do niej."}
+```
+
+App → backend:
+
+```json
+{"type": "alert_trusted_result", "callId": "CA…", "sent": true}
+{"type": "alert_trusted_result", "callId": "CA…", "sent": false, "error": "no_permission"}
+```
+
+- `text` is sent as is (the backend writes it in `lang`; plain ASCII keeps it to one 160-character GSM-7 SMS;
+  longer texts are split with `SmsManager.divideMessage` and sent as a multipart SMS).
+- The recipient is the trusted person from the app settings (the `trustedPerson.number` also sent in
+  `settings`); the backend does not send a number.
+- `sent: true` only after the radio confirmed every part (sent `PendingIntent` with `RESULT_OK`); no
+  confirmation within 60 s counts as `send_failed`.
+- `error`: `no_permission` (SEND_SMS not granted), `no_number` (no trusted person chosen), `send_failed`
+  (radio error, no SIM/service, timeout).
+- One SMS per `callId`: the app ignores repeated `alert_trusted` for the same call (no second result).
+- The message may arrive during the call, after `call_ended`, or while the app is in the background (the
+  control channel is kept alive by a foreground service). If the control channel is down when the result is
+  ready, the app queues it and sends it after reconnecting.
+- The app shows the result on the call-ended screen ("Wysłano SMS do: Anna ✓" or the error).
+- Permission: SEND_SMS is requested when the senior chooses the trusted person and at app start if a trusted
+  person is set; never during a call.
+- Privacy: the app never logs the number or the text, only the result.
+
+HarmonyOS: not implemented (the HarmonyOS app is frozen; third-party apps cannot send SMS silently there).
