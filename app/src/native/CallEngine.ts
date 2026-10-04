@@ -31,7 +31,14 @@ export type RiskUpdate = {
   reasons: (RiskReason | string)[];
 };
 
-export type VerifyPasswordRequest = {callId: string};
+/** `timeoutSeconds` is absent on older backends and on HarmonyOS (frozen native code): default 12 s. */
+export type VerifyPasswordRequest = {callId: string; timeoutSeconds?: number};
+
+/** Extension: no family password is configured, the backend ends the call after `seconds`. */
+export type ConfirmBlockRequest = {callId: string; seconds?: number};
+
+export const DEFAULT_PASSWORD_TIMEOUT_S = 12;
+export const DEFAULT_CONFIRM_BLOCK_S = 8;
 
 export type CallEndReason = 'caller_hangup' | 'senior_hangup' | 'scam_blocked' | 'timeout' | 'error';
 
@@ -60,6 +67,7 @@ export type CallEngineEvents = {
   callActive: CallActive;
   risk: RiskUpdate;
   verifyPassword: VerifyPasswordRequest;
+  confirmBlock: ConfirmBlockRequest;
   callEnded: CallEnded;
   protectionStatus: ProtectionStatus;
   trustedAlert: TrustedAlert;
@@ -71,6 +79,7 @@ export const CALL_ENGINE_EVENT_NAMES: {[K in keyof CallEngineEvents]: string} = 
   callActive: 'CallEngine.onCallActive',
   risk: 'CallEngine.onRisk',
   verifyPassword: 'CallEngine.onVerifyPassword',
+  confirmBlock: 'CallEngine.onConfirmBlock',
   callEnded: 'CallEngine.onCallEnded',
   protectionStatus: 'CallEngine.onProtectionStatus',
   trustedAlert: 'CallEngine.onTrustedAlert',

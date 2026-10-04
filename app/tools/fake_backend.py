@@ -10,8 +10,11 @@ Behaviour (as in the real backend):
   without messages; incoming_call `--call-after` seconds after connect (masked caller, token valid 5 min, single use)
 - call: wrong/used/expired token or ended call -> close 1008; no audio before accept; no accept within 30 s ->
   call_ended(timeout); hangup -> call_ended(senior_hangup); call_ended is followed by close 1000
-- scenario "scam": risk none/warn/high, then verify_password; the correct `--password` via dtmf within 20 s lets
-  the call continue, otherwise call_ended(scam_blocked). "benign": low risk only. `--caller-hangup N`: caller hangs
+- scenario "scam": risk none/warn/high, then verify_password {timeoutSeconds}; the correct `--password` via dtmf
+  within `--password-timeout` (12 s) lets the call continue, otherwise call_ended(scam_blocked). `--no-password`:
+  instead of verify_password send confirm_block {seconds} (`--block-seconds`, 8) and end with scam_blocked after
+  it. A senior hangup after a high risk ends with scam_blocked (as in the real backend). `--step` stretches the
+  script timing (e.g. 3 = risk events every 9 s, for screenshots). "benign": low risk only. `--caller-hangup N`: caller hangs
   up N s after accept.
 """
 import argparse
@@ -29,7 +32,7 @@ FRAME = bytes(640)  # 20 ms of silence, PCM16 LE mono 16 kHz
 CONTROL_IDLE_S = 45
 TOKEN_TTL_S = 300
 ACCEPT_TIMEOUT_S = 30
-PASSWORD_TIMEOUT_S = 20
+PASSWORD_TIMEOUT_S = 12
 CALLS: dict[str, dict] = {}  # callId -> {"token", "created", "used", "ended"}
 CONTROLS: set = set()  # open control sockets (for alert_trusted)
 ARGS: argparse.Namespace
@@ -117,7 +120,8 @@ async def call(ws, call_id, token):
         return
     info["used"] = True
     log(f"call {call_id}: connected (ringing)")
-    state = {"accepted": False, "password_ok": False, "verify_at": None, "ended": False}
+    state = {"accepted": False, "password_ok": False, "verify_at": None, "block_at": None, "high": False,
+             "ended": False}
     received = 0
     window = bytearray()
     accepted = asyncio.Event()
@@ -154,8 +158,10 @@ async def call(ws, call_id, token):
                      "reasons": ["authority", "money"]}),
                 (9, {"type": "risk", "score": 93, "level": "high", "scamType": "police",
                      "reasons": ["authority", "money", "secrecy"]}),
-                (9.5, {"type": "verify_password"}),
+                (9.5, {"type": "confirm_block", "seconds": ARGS.block_seconds} if ARGS.no_password
+                 else {"type": "verify_password", "timeoutSeconds": round(ARGS.password_timeout)}),
             ]
+            script = [(at * ARGS.step, msg) for at, msg in script]
         else:
             script = [(3, {"type": "risk", "score": 10, "level": "none", "scamType": "none", "reasons": []}),
                       (7, {"type": "risk", "score": 12, "level": "none", "scamType": "none", "reasons": []})]
@@ -170,6 +176,13 @@ async def call(ws, call_id, token):
                 await send_json(msg)
                 if msg["type"] == "verify_password":
                     state["verify_at"] = time.monotonic()
+                elif msg["type"] == "confirm_block":
+                    state["block_at"] = time.monotonic()
+                elif msg.get("level") == "high":
+                    state["high"] = True
+            if state["block_at"] and time.monotonic() - state["block_at"] > ARGS.block_seconds:
+                await end("scam_blocked")
+                return
             if state["verify_at"] and not state["password_ok"]:
                 if dtmf_ok.is_set():
                     state["password_ok"] = True
@@ -208,7 +221,7 @@ async def call(ws, call_id, token):
                 accepted.set()
             elif kind == "hangup":
                 log(f"call {call_id}: <- hangup")
-                await end("senior_hangup")
+                await end("scam_blocked" if state["high"] and not state["password_ok"] else "senior_hangup")
                 break
             elif kind == "dtmf":
                 digits = str(msg.get("digits", ""))
@@ -251,6 +264,10 @@ if __name__ == "__main__":
     p.add_argument("--scenario", choices=["scam", "benign"], default="scam")
     p.add_argument("--password", default="1234", help="family password expected via dtmf")
     p.add_argument("--password-timeout", type=float, default=PASSWORD_TIMEOUT_S)
+    p.add_argument("--no-password", action="store_true",
+                   help="no family password configured: send confirm_block instead of verify_password")
+    p.add_argument("--block-seconds", type=int, default=8, help="confirm_block countdown")
+    p.add_argument("--step", type=float, default=1, help="multiplies the scam script timing")
     p.add_argument("--caller-hangup", type=float, default=0, help="caller hangs up N s after accept; 0 = never")
     p.add_argument("--idle", type=float, default=CONTROL_IDLE_S, help="control idle close (4000) after N s")
     p.add_argument("--lang", default="pl")

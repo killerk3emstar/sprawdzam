@@ -13,6 +13,7 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
+import com.facebook.react.common.LifecycleState
 import com.facebook.react.modules.core.PermissionAwareActivity
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
@@ -32,7 +33,10 @@ class CallEngineModule(reactContext: ReactApplicationContext) :
   private val client = OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build()
   private val control = ControlChannel(client, this)
   private val settings = SettingsStore(reactContext)
-  private val notifier = CallNotifier(reactContext).apply { lang = settings.lang() }
+  private val notifier = CallNotifier(reactContext).apply {
+    lang = settings.lang()
+    inForeground = { reactContext.lifecycleState == LifecycleState.RESUMED }
+  }
   private val trustedSms = TrustedSms(reactContext)
   @Volatile private var call: CallSession? = null
   private var pendingPick: Promise? = null
@@ -201,8 +205,19 @@ class CallEngineModule(reactContext: ReactApplicationContext) :
     })
   }
 
-  override fun onVerifyPassword(callId: String) =
-      emit(Protocol.EVENT_VERIFY_PASSWORD, Arguments.createMap().apply { putString("callId", callId) })
+  override fun onVerifyPassword(callId: String, timeoutSeconds: Int) =
+      emit(Protocol.EVENT_VERIFY_PASSWORD, Arguments.createMap().apply {
+        putString("callId", callId)
+        putInt("timeoutSeconds", timeoutSeconds)
+      })
+
+  override fun onConfirmBlock(callId: String, seconds: Int) {
+    notifier.confirmBlock()
+    emit(Protocol.EVENT_CONFIRM_BLOCK, Arguments.createMap().apply {
+      putString("callId", callId)
+      putInt("seconds", seconds)
+    })
+  }
 
   override fun onCallEnded(callId: String, reason: String) {
     notifier.callEnded(reason)

@@ -12,6 +12,10 @@ object Protocol {
   const val REASON_SENIOR_HANGUP = "senior_hangup"
   const val REASON_ERROR = "error"
 
+  /** Defaults when an older backend omits verify_password.timeoutSeconds / confirm_block.seconds. */
+  const val DEFAULT_PASSWORD_TIMEOUT_S = 12
+  const val DEFAULT_CONFIRM_BLOCK_S = 8
+
   const val SAMPLE_RATE = 16000
   const val FRAME_BYTES = 640 // 20 ms PCM16 mono at 16 kHz
 
@@ -20,6 +24,8 @@ object Protocol {
   const val EVENT_CALL_ACTIVE = "CallEngine.onCallActive"
   const val EVENT_RISK = "CallEngine.onRisk"
   const val EVENT_VERIFY_PASSWORD = "CallEngine.onVerifyPassword"
+  /** Extension (APP_PROTOCOL_EXTENSIONS.md): no family password configured, the backend ends the call soon. */
+  const val EVENT_CONFIRM_BLOCK = "CallEngine.onConfirmBlock"
   const val EVENT_CALL_ENDED = "CallEngine.onCallEnded"
   const val EVENT_PROTECTION_STATUS = "CallEngine.onProtectionStatus"
   const val EVENT_ERROR = "CallEngine.onError"

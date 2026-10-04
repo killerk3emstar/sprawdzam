@@ -63,3 +63,52 @@ App → backend:
 - Privacy: the app never logs the number or the text, only the result.
 
 HarmonyOS: not implemented (the HarmonyOS app is frozen; third-party apps cannot send SMS silently there).
+
+## Family-password countdown and blocking without a password (call channel)
+
+### `verify_password.timeoutSeconds` (backend → app)
+
+```json
+{"type": "verify_password", "timeoutSeconds": 12}
+```
+
+- `timeoutSeconds` (new, optional): how long the backend waits for the correct family password before it ends
+  the call with `call_ended` `scam_blocked`. The app shows a live countdown on the keypad screen
+  ("Zostało 9 s" / "9 s left"); at zero it shows "Czas minął. Rozłączamy." and waits for `call_ended`.
+- Absent (older backends; the frozen HarmonyOS module does not forward it): the app assumes **12 s**.
+  Values outside 1–120 are treated as absent (120 is the cap).
+
+### `confirm_block` (backend → app, new)
+
+```json
+{"type": "confirm_block", "seconds": 8}
+```
+
+- Sent instead of `verify_password` when risk is high and **no family password is configured**.
+- The app switches to a full-screen red warning: "To wygląda na oszustwo. Rozłączam za 8 s" with a live
+  countdown and one large "Rozłącz teraz" (Hang up now) button that sends `{"type": "hangup"}`.
+  There is deliberately **no "continue" option**.
+- The backend ends the call after `seconds` with `call_ended` `scam_blocked` (and the trusted-person alert).
+  If no `call_ended` arrived 3 s after the countdown reached zero, the app sends `hangup` itself.
+- `seconds` absent or invalid: 8.
+- Only the first `confirm_block` per call counts (a repeat does not restart the countdown).
+
+### `hangup` during a high-risk call (app → backend, changed semantics)
+
+The senior's `{"type": "hangup"}` after the call reached high risk (and no correct family password was given)
+now ends the call with `call_ended` `scam_blocked` instead of `senior_hangup`, so the trusted-person SMS goes
+out. The app shows the blocked-call result screen. If the senior hangs up from the `confirm_block` screen and the
+backend's answer does not arrive within the app's 2 s hang-up grace period (the app then ends the call locally as
+`senior_hangup`), the app still shows the blocked-call result.
+
+### Blocked-call result screen (app only)
+
+After `scam_blocked`: "Rozłączyliśmy podejrzaną rozmowę", the SMS result line (`alert_trusted_result`), the advice
+"Nie oddzwaniaj na ten numer. Nie podawaj pieniędzy ani kodów.", and, when a trusted person is set, a large
+"Zadzwoń do: {name}" button that opens the phone's dialer with the trusted person's number filled in (`tel:`
+URI, `ACTION_VIEW` → dialer; no `CALL_PHONE` permission, the senior presses call). This follows the police's
+advice: hang up, then call the relative back on a number you know.
+
+Native events (Android `CallEngine` module): `CallEngine.onVerifyPassword` now carries `timeoutSeconds`;
+new `CallEngine.onConfirmBlock` `{callId, seconds}`. The TurboModule spec is unchanged. HarmonyOS: not
+implemented (frozen); the shared JS falls back to the 12 s default and never receives `confirm_block`.
