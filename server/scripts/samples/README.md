@@ -28,6 +28,15 @@ streams as is. A 700 ms silence is inserted between sentences, so the backend's 
 segmenter cuts 3-8 s segments as it would for a real caller. The audio is not committed (Apple
 voice licensing); render it on each machine. Needs macOS `say` and `ffmpeg`.
 
+### Own recordings
+
+The demo clips can be replaced by our own voice recordings (the macOS voices sound robotic):
+`scripts/import_recording.sh <audio file> <name>` trims silence at both ends, applies a
+120 Hz high-pass and a 3.4 kHz low-pass, normalises loudness to about -18 LUFS and writes the
+same 8 kHz mu-law format to `data/samples/<name>.ulaw` (the previous clip is kept in
+`data/samples/tts/`). Step-by-step guide for the team, in Polish, with the texts to read:
+[`NAGRANIA.md`](NAGRANIA.md).
+
 ## Results against the models
 
 Each clip was streamed through the backend in real time with `scripts/smoke_call.py` (caller in

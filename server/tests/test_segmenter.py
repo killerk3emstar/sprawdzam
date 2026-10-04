@@ -69,3 +69,72 @@ def test_reset_and_validation():
     assert feed(segmenter, silence(1.5)) == []
     with pytest.raises(ValueError):
         PauseSegmenter(min_seconds=8, max_seconds=3)
+
+
+# ---------------------------------------------------------------------- adaptive (senior mic)
+RNG = np.random.default_rng(7)
+
+
+def speech_like(seconds: float, level: float = 0.1, freq: float = 220.0) -> np.ndarray:
+    """A tone with a 4 Hz syllable envelope at RMS ~`level`."""
+    t = np.arange(int(seconds * RATE)) / RATE
+    envelope = 0.6 + 0.4 * np.sin(2 * np.pi * 4 * t)
+    return (level * np.sqrt(2) * envelope * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+
+
+def noise(seconds: float, rms: float) -> np.ndarray:
+    return (rms * RNG.standard_normal(int(seconds * RATE))).astype(np.float32)
+
+
+def utterances(count: int, seconds: float, gap: float, level: float = 0.1) -> np.ndarray:
+    parts = []
+    for _ in range(count):
+        parts += [speech_like(seconds, level), silence(gap)]
+    return np.concatenate(parts)
+
+
+def senior_segmenter(adaptive: bool = True) -> PauseSegmenter:
+    return PauseSegmenter(min_seconds=1.5, max_seconds=5.0, adaptive=adaptive)
+
+
+def test_adaptive_cuts_pauses_above_a_noise_floor():
+    # Speakerphone + AGC: the "pauses" sit at -30 dBFS, above the fixed -40 dBFS threshold.
+    audio = utterances(4, 2.5, 0.5)
+    audio = np.concatenate([noise(1.0, 0.03), audio + noise(audio.size / RATE, 0.03)])
+    fixed = feed(senior_segmenter(adaptive=False), audio)
+    assert [seconds(s) for s in fixed] == [5.0, 5.0]  # cut by length only
+    adaptive = senior_segmenter()
+    lengths = [seconds(s) for s in feed(adaptive, audio)]
+    assert len(lengths) == 4 and all(1.5 <= length <= 4.0 for length in lengths)
+    cut = adaptive.last_cut
+    assert cut["reason"] == "pause" and 0.02 <= cut["noise_floor"] <= 0.04
+    assert cut["threshold"] > 0.03 and cut["seconds"] == round(lengths[-1], 2)
+
+
+def test_adaptive_cuts_on_relative_drop_over_residual_caller_echo():
+    # The caller's voice leaks from the speaker 14 dB below the senior's own speech.
+    audio = utterances(4, 2.0, 0.6)
+    t = np.arange(audio.size) / RATE
+    echo = 0.02 * np.sqrt(2) * (0.5 + 0.5 * np.abs(np.sin(2 * np.pi * 3 * t)))
+    audio = audio + (echo * np.sin(2 * np.pi * 150 * t)).astype(np.float32)
+    assert all(seconds(s) == 5.0 for s in feed(senior_segmenter(adaptive=False), audio))
+    lengths = [seconds(s) for s in feed(senior_segmenter(), audio)]
+    assert len(lengths) == 4 and all(1.9 <= length <= 3.0 for length in lengths)
+
+
+def test_adaptive_ignores_steady_noise_and_hears_quieter_speech_later():
+    segmenter = senior_segmenter()
+    # Steady noise: at most the first 2 s (before the floor is learned) can pass as speech.
+    assert len(feed(segmenter, noise(10.0, 0.02))) <= 1
+    segmenter.reset()
+    loud_then_quiet = np.concatenate(
+        [speech_like(2.0, 0.3), silence(5.0), speech_like(2.0, 0.03), silence(2.0)]
+    )
+    assert len(feed(segmenter, loud_then_quiet)) == 2
+
+
+def test_fixed_mode_is_unchanged_for_the_caller():
+    segmenter = PauseSegmenter()
+    assert not segmenter.adaptive and segmenter.threshold == 0.01
+    feed(segmenter, tone(3.5), silence(0.6))
+    assert segmenter.last_cut["reason"] == "pause"

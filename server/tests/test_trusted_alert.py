@@ -1,13 +1,16 @@
 """Trusted-person alert sent by the senior's phone (protocol v0 extension)."""
 
 import json
+import re
+from datetime import UTC, datetime
 
 import pytest
 
 from app.events import EventBus
 from app.relay import protocol, trusted_alert
 from app.relay.hub import TRUSTED_ALERT_TTL_SECONDS, AppHub
-from app.relay.trusted_alert import compose_alert_text
+from app.relay.trusted_alert import caller_tail, compose_alert_text
+from app.risk.rules import MONEY_ASKS, score_text
 from tests.conftest import (
     DEVICE_TOKEN,
     SCAM_TEXT,
@@ -54,6 +57,75 @@ def test_generic_fallback_and_main_reason():
     )
     assert "(asked to keep it secret)" in compose_alert_text("none", ["urgency", "secrecy"], "en")
     assert "(fake bank employee, asked for money)" in compose_alert_text("bank", ["money"], "en")
+
+
+AT = datetime(2026, 10, 4, 2, 31, tzinfo=UTC)  # 04:31 in Warsaw (CEST)
+
+
+def test_rich_pl_text_matches_the_demo_target():
+    text = compose_alert_text(
+        "police",
+        ["authority", "money", "secrecy"],
+        "pl",
+        at=AT,
+        caller="+48 *** *** 123",
+        money_ask="cash",
+    )
+    assert text == (
+        "Sprawdzam 04:31: babcia mogla rozmawiac z oszustem (falszywy policjant, prosba o "
+        "gotowke, nr ...123). Zadzwon do niej."
+    )
+
+
+def test_rich_en_text_and_money_ask_beats_generic_reason():
+    text = compose_alert_text(
+        "bank", ["money", "urgency"], "en", at=AT, caller="+48500000789", money_ask="blik"
+    )
+    assert text == (
+        "Second Ear 04:31: your relative may have talked to a scammer (fake bank employee, "
+        "asked for a BLIK code, from a number ending 789). Please call them."
+    )
+
+
+def test_hidden_caller_and_naive_time():
+    text = compose_alert_text("none", [], "pl", at=datetime(2026, 1, 2, 9, 5), caller="unknown")
+    assert text == "Sprawdzam 09:05: babcia mogla rozmawiac z oszustem. Zadzwon do niej."
+    assert caller_tail("+48 *** *** 042") == "042" and caller_tail("unknown") is None
+
+
+def test_details_are_dropped_in_priority_order(monkeypatch):
+    full = compose_alert_text(
+        "bank", ["secrecy"], "en", at=AT, caller="+48500000789", money_ask=None
+    )
+    assert "asked to keep it secret" in full and "ending 789" in full
+    # Too long: the generic warning sign goes first, then the caller digits, then the ask.
+    monkeypatch.setattr(trusted_alert, "MAX_SMS_CHARS", len(full) - 1)
+    shorter = compose_alert_text("bank", ["secrecy"], "en", at=AT, caller="+48500000789")
+    assert "secret" not in shorter and "ending 789" in shorter
+    ask = compose_alert_text("bank", [], "pl", at=AT, caller="+48500000789", money_ask="blik")
+    monkeypatch.setattr(trusted_alert, "MAX_SMS_CHARS", len(ask) - 1)
+    trimmed = compose_alert_text("bank", [], "pl", at=AT, caller="+48500000789", money_ask="blik")
+    assert "...789" not in trimmed and "BLIK" in trimmed and "banku" in trimmed
+
+
+@pytest.mark.parametrize("lang", ["pl", "en"])
+@pytest.mark.parametrize("scam", ["none", "grandchild", "police", "bank", "other"])
+@pytest.mark.parametrize("ask", [None, *MONEY_ASKS])
+def test_rich_texts_fit_one_sms(lang, scam, ask):
+    text = compose_alert_text(
+        scam, ["secrecy"], lang, at=AT, caller="+48 *** *** 123", money_ask=ask
+    )
+    assert text.isascii() and len(text) <= 159
+    if lang == "pl":  # the PL sentence is short enough to always keep the caller digits
+        assert "nr ...123" in text
+
+
+def test_rules_expose_the_concrete_money_ask():
+    assert score_text("Proszę podać kod BLIK i zrobić przelew", "pl").money_ask == "blik"
+    assert score_text("Przelej na bezpieczne konto", "pl").money_ask == "safe_account"
+    assert score_text("Wypłać gotówkę, kurier ją odbierze", "pl").money_ask == "cash"
+    assert score_text("Please wire the money today", "en").money_ask == "transfer"
+    assert score_text("Oddam ci pieniądze w niedzielę", "pl").money_ask is None
 
 
 def test_senior_word_is_one_constant(monkeypatch):
@@ -191,7 +263,9 @@ def test_blocked_call_sends_one_alert_on_the_control_channel(make_client):
     alert = client.control.of_type("alert_trusted")[0]
     assert alert["callId"] == call_id and alert["scamType"] == "police"
     assert alert["lang"] == "pl" and {"money", "secrecy"} <= set(alert["reasons"])
-    assert alert["text"].startswith("Sprawdzam: babcia") and alert["text"].isascii()
+    text = alert["text"]
+    assert re.match(r"Sprawdzam \d\d:\d\d: babcia mogla", text) and text.isascii()
+    assert "nr ...001)" in text and len(text) <= 159
     assert len(client.control.of_type("alert_trusted")) == 1
 
 

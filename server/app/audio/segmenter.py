@@ -12,6 +12,21 @@ Rules, applied per frame once a segment has started:
 * after a long pause (`long_pause_seconds`) a shorter utterance is emitted if it holds at
   least `min_speech_seconds` of speech, otherwise it is dropped as noise.
 Pure silence is never emitted. A short pre-roll keeps the start of the first word.
+
+Adaptive mode (`adaptive=True`, used for the senior's phone microphone): on a speakerphone
+with echo cancellation, noise suppression and automatic gain, the level between words rarely
+falls below a fixed -40 dBFS (residual echo of the caller, room noise lifted by the AGC), so
+every segment ran to `max_seconds`. The threshold then follows the signal:
+
+    threshold = max(speech_rms, noise_floor * FLOOR_RATIO, speech_level * DROP_RATIO)
+
+* `noise_floor` is the quietest 20 ms frame of the last 2 s (minimum statistics: even fluent
+  speech has a quiet frame between words; until 2 s of audio were seen, it is at most
+  `speech_rms / FLOOR_RATIO`, so speech right at the start is not taken for the floor);
+* `speech_level` is a slow average of the frames counted as speech (decaying during
+  pauses), so a frame `DROP_RATIO` (-16 dB) below the speaker's own level counts as a pause
+  even if it is far above the absolute threshold.
+`last_cut` describes the most recent emitted segment (for DEBUG logs).
 """
 
 from __future__ import annotations
@@ -22,6 +37,13 @@ import numpy as np
 
 DEFAULT_SPEECH_RMS = 0.01  # ~ -40 dBFS
 FRAME_SECONDS = 0.02
+FLOOR_RATIO = 2.0  # speech must be ~6 dB above the noise floor
+DROP_RATIO = 0.16  # ~ -16 dB below the running speech level counts as a pause
+FLOOR_WINDOW_SECONDS = 2.0  # noise floor = quietest frame of this window (minimum statistics)
+LEVEL_WEIGHT = 0.05  # speech level: weight of each new speech frame (~1 s memory)
+# Speech level decay per non-speech frame (~ -4 dB/s), so quieter speech later in the call is
+# not mistaken for a pause forever.
+LEVEL_DECAY = 0.99
 
 
 class PauseSegmenter:
@@ -37,6 +59,7 @@ class PauseSegmenter:
         min_speech_seconds: float = 0.8,
         preroll_seconds: float = 0.2,
         keep_trailing_seconds: float = 0.2,
+        adaptive: bool = False,
     ) -> None:
         if not 0 < min_seconds < max_seconds:
             raise ValueError("expected 0 < min_seconds < max_seconds")
@@ -50,6 +73,11 @@ class PauseSegmenter:
         self.min_speech_frames = to_frames(min_speech_seconds)
         self.keep_trailing = to_frames(keep_trailing_seconds)
         self.speech_rms = speech_rms
+        self.adaptive = adaptive
+        self._floor_window: deque[float] = deque(maxlen=to_frames(FLOOR_WINDOW_SECONDS))
+        self.speech_level = 0.0
+        self.last_cut: dict[str, float | str] = {}
+        self._rms_sum = 0.0
         self._pending = np.zeros(0, dtype=np.float32)
         self._preroll: deque[np.ndarray] = deque(maxlen=to_frames(preroll_seconds))
         self._segment: list[np.ndarray] = []
@@ -75,7 +103,32 @@ class PauseSegmenter:
                 out.append(segment)
         return out
 
+    @property
+    def threshold(self) -> float:
+        if not self.adaptive:
+            return self.speech_rms
+        return max(self.speech_rms, self.noise_floor * FLOOR_RATIO, self.speech_level * DROP_RATIO)
+
+    @property
+    def noise_floor(self) -> float:
+        window = self._floor_window
+        floor = min(window) if window else 0.0
+        if len(window) < (window.maxlen or 0):
+            floor = min(floor, self.speech_rms / FLOOR_RATIO) if window else 0.0
+        return floor
+
+    def _track(self, rms: float, speech: bool) -> None:
+        if not speech:
+            self.speech_level *= LEVEL_DECAY
+        elif self.speech_level == 0.0:
+            self.speech_level = rms
+        else:
+            self.speech_level += LEVEL_WEIGHT * (rms - self.speech_level)
+
     def reset(self) -> None:
+        self._floor_window.clear()
+        self.speech_level = 0.0
+        self._rms_sum = 0.0
         self._pending = np.zeros(0, dtype=np.float32)
         self._preroll.clear()
         self._segment = []
@@ -83,17 +136,24 @@ class PauseSegmenter:
         self._silence_run = 0
 
     def _on_frame(self, frame: np.ndarray) -> np.ndarray | None:
-        speech = float(np.sqrt(np.mean(np.square(frame, dtype=np.float64)))) >= self.speech_rms
+        rms = float(np.sqrt(np.mean(np.square(frame, dtype=np.float64))))
+        if self.adaptive:
+            self._floor_window.append(rms)
+        speech = rms >= self.threshold
+        if self.adaptive:
+            self._track(rms, speech)
         if not self._segment:
             if speech:
                 self._segment = [*self._preroll, frame]
                 self._preroll.clear()
                 self._speech_frames, self._silence_run = 1, 0
+                self._rms_sum = rms
             else:
                 self._preroll.append(frame)
             return None
 
         self._segment.append(frame)
+        self._rms_sum += rms
         if speech:
             self._speech_frames += 1
             self._silence_run = 0
@@ -102,16 +162,24 @@ class PauseSegmenter:
         length = len(self._segment)
         voiced_length = length - self._silence_run
         if length >= self.max_frames:
-            return self._emit()
+            return self._emit("max_length")
         if self._silence_run >= self.pause_frames and voiced_length >= self.min_frames:
-            return self._emit()
+            return self._emit("pause")
         if self._silence_run >= self.long_pause_frames:
             if self._speech_frames >= self.min_speech_frames:
-                return self._emit()
+                return self._emit("long_pause")
             self._drop()
         return None
 
-    def _emit(self) -> np.ndarray:
+    def _emit(self, reason: str) -> np.ndarray:
+        self.last_cut = {
+            "reason": reason,
+            "seconds": round(len(self._segment) * FRAME_SECONDS, 2),
+            "mean_rms": round(self._rms_sum / max(1, len(self._segment)), 4),
+            "noise_floor": round(self.noise_floor, 4),
+            "speech_level": round(self.speech_level, 4),
+            "threshold": round(self.threshold, 4),
+        }
         drop = max(0, self._silence_run - self.keep_trailing)
         frames = self._segment[: len(self._segment) - drop] if drop else self._segment
         audio = np.concatenate(frames)

@@ -83,8 +83,13 @@ def risk_event(assessment: RiskAssessment) -> dict[str, object]:
     }
 
 
-def verify_password() -> dict[str, object]:
-    return {"type": "verify_password"}
+def verify_password(timeout_seconds: int) -> dict[str, object]:
+    return {"type": "verify_password", "timeoutSeconds": int(timeout_seconds)}
+
+
+def confirm_block(seconds: int) -> dict[str, object]:
+    """No family password configured: the call is blocked after `seconds`."""
+    return {"type": "confirm_block", "seconds": int(seconds)}
 
 
 def call_ended(reason: EndReason) -> dict[str, object]:

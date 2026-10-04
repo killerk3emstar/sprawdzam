@@ -452,6 +452,30 @@ class RulesResult:
     def flags(self) -> dict[str, bool]:
         return {c.value: self.categories.get(c, 0.0) > 0 for c in Category}
 
+    @property
+    def money_ask(self) -> str | None:
+        """The most concrete way money was asked for (for the trusted-person SMS), or None:
+        "blik", "safe_account", "transfer", "credentials", "cash", "crypto", "gift_card"."""
+        kinds = {_MONEY_ASK_BY_RULE.get(rule.partition(".")[2]) for rule in self.matched}
+        return next((kind for kind in MONEY_ASKS if kind in kinds), None)
+
+
+# Money rules (id without the language prefix) -> concrete ask, in priority order.
+MONEY_ASKS = ("blik", "safe_account", "transfer", "credentials", "cash", "crypto", "gift_card")
+_MONEY_ASK_BY_RULE = {
+    "money.blik": "blik",
+    "money.code_digits": "blik",
+    "money.safe_account": "safe_account",
+    "money.transfer": "transfer",
+    "money.credentials": "credentials",
+    "money.courier_pickup": "cash",
+    "money.courier": "cash",
+    "money.cash": "cash",
+    "money.withdraw": "cash",
+    "money.crypto_gift": "crypto",
+    "money.crypto": "crypto",
+    "money.gift_card": "gift_card",
+}
 
 _TRANSLATE = str.maketrans(
     {"ł": "l", "Ł": "L", "’": "", "'": "", "`": "", "$": " usd ", "£": " gbp ", "€": " eur "}

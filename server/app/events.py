@@ -48,6 +48,8 @@ ACTIONS = frozenset(
         "sms_sent",
         "sms_failed",
         "fail_open",
+        "confirm_block",
+        "senior_blocked",
     }
 )
 

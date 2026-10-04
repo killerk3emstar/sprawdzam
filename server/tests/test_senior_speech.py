@@ -51,6 +51,22 @@ def test_echo_guard_matches_similar_and_contained_text():
     assert not guard.is_echo(CALLER)
 
 
+def test_echo_guard_strips_echo_from_a_long_mixed_segment():
+    # 5 s of speakerphone audio: the end of one caller sentence, the start of the next, and
+    # the senior talking in between. Neither the whole-text nor the word-ratio rule fires.
+    guard = EchoGuard()
+    guard.add_caller("Proszę wypłacić wszystkie oszczędności z konta.")
+    guard.add_caller("Kurier przyjedzie po nie za godzinę.")
+    mixed = "wszystkie oszczędności z konta, a kto mówi? Zadzwonię do syna. Kurier przyjedzie po"
+    assert not guard.is_echo(mixed)
+    assert guard.remove_echo(mixed) == "a kto mówi? Zadzwonię do syna."
+    # Nothing echoed: unchanged. All echo: None. A short shared phrase is kept.
+    assert guard.remove_echo(SENIOR) == SENIOR
+    assert guard.remove_echo("Kurier przyjedzie po nie za godzinę") is None
+    assert guard.remove_echo("z konta? Nie dam") == "z konta? Nie dam"
+    assert guard.remove_echo("oszczędności z konta tak") is None  # one word left: all echo
+
+
 def test_echo_guard_spanning_two_caller_utterances():
     guard = EchoGuard()
     guard.add_caller("Proszę wypłacić wszystkie oszczędności z konta.")
@@ -132,6 +148,33 @@ async def test_echo_of_the_caller_is_dropped(caplog):
     assert session.transcript.render("pl").splitlines() == [f"Dzwoniący: {CALLER}"]
     assert any("echo_dropped" in r.getMessage() for r in caplog.records)
     assert "wypadek" not in caplog.text  # no transcript text in logs
+    await session.close()
+
+
+async def test_echo_is_trimmed_from_a_mixed_senior_segment(caplog):
+    caplog.set_level(logging.INFO)
+    mixed = "Miałem wypadek, potrzebuję pieniędzy. Kto mówi? Zadzwonię do syna."
+    session = make_session(ScriptedSTT([CALLER], [mixed]))
+    session.start()
+    session._enqueue("caller", tone(3.5, 0.3))
+    session._enqueue("senior", tone(3.5, 0.6))
+    await wait_for(lambda: len(session.transcript) == 2)
+    assert (
+        session.transcript.render("pl").splitlines()[-1] == "Senior: Kto mówi? Zadzwonię do syna."
+    )
+    assert session.stats["echo_trimmed"] == 1 and session.stats["echo_dropped"] == 0
+    assert "syna" not in caplog.text  # counts only in the logs
+    await session.close()
+
+
+async def test_segment_cuts_are_logged_at_debug(caplog):
+    caplog.set_level(logging.DEBUG, logger="app.session")
+    session = make_session(ScriptedSTT([], [SENIOR]))
+    pcm = (tone(2.0, 0.6) * 32767).astype("<i2").tobytes() + bytes(640 * 75)
+    for i in range(0, len(pcm), 640):
+        session.feed_senior_pcm16(pcm[i : i + 640])
+    cuts = [r.getMessage() for r in caplog.records if "segment_cut" in r.getMessage()]
+    assert len(cuts) == 1 and '"speaker": "senior"' in cuts[0] and "noise_floor" in cuts[0]
     await session.close()
 
 

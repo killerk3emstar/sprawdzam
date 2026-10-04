@@ -73,7 +73,9 @@ class CallSession:
         self.stt = stt
         self.monitor = monitor
         self.segmenter = segmenter or PauseSegmenter(STT_RATE)
-        self.senior_segmenter = senior_segmenter or PauseSegmenter(STT_RATE, min_seconds=1.5)
+        self.senior_segmenter = senior_segmenter or PauseSegmenter(
+            STT_RATE, min_seconds=1.5, max_seconds=5.0, adaptive=True
+        )
         # False for whitelisted contacts: audio is only resampled for the bridge, never
         # segmented, transcribed or scored.
         self.analyse = analyse
@@ -99,6 +101,7 @@ class CallSession:
             "dropped_segments": 0,
             "stt_errors": 0,
             "echo_dropped": 0,
+            "echo_trimmed": 0,
         }
         self.degraded = False
         self.closed = False
@@ -163,6 +166,16 @@ class CallSession:
             self._enqueue("senior", segment)
 
     def _enqueue(self, speaker: Speaker, segment: np.ndarray) -> None:
+        if logger.isEnabledFor(logging.DEBUG):
+            segmenter = self.segmenter if speaker == "caller" else self.senior_segmenter
+            log_event(
+                logger,
+                logging.DEBUG,
+                "segment_cut",
+                call_id=self.call_sid,
+                speaker=speaker,
+                **segmenter.last_cut,
+            )
         pending = self._pending[speaker]
         if len(pending) >= self._queue_size:
             # Backpressure: STT is slower than real time; keep the freshest audio.
@@ -260,10 +273,22 @@ class CallSession:
         if not isinstance(text, str) or not text.strip():
             return
         if speaker == "senior":
-            if self.echo_guard.is_echo(text, captured_at=enqueued_at):
+            kept = self.echo_guard.remove_echo(text, captured_at=enqueued_at)
+            if kept is None:
                 self.stats["echo_dropped"] += 1
                 log_event(logger, logging.INFO, "echo_dropped", call_id=self.call_sid)
                 return
+            if kept != text:
+                self.stats["echo_trimmed"] += 1
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "echo_trimmed",
+                    call_id=self.call_sid,
+                    words_before=len(text.split()),
+                    words_after=len(kept.split()),
+                )
+                text = kept
         else:
             self.echo_guard.add_caller(text, at=enqueued_at)
         self.transcript.add(speaker, text)

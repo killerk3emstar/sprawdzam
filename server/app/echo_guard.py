@@ -7,6 +7,11 @@ normalised text is highly similar to (or contained in) a reference text from the
 `window_seconds`, or when nearly all of its words appear in that window (an echo segment can
 span the end of one caller utterance and the start of the next). References are the caller's
 utterances and the prompts played to the senior. Text only, RAM only, never logged.
+
+Long senior segments (speakerphone: the senior talks over the caller's voice from the
+speaker) can mix echo with real senior speech, so `remove_echo()` also removes runs of at least
+`MIN_RUN_WORDS` consecutive words that appear in the same order in the recent caller text
+(the references concatenated, so a run may span two caller utterances) and keeps the rest.
 """
 
 from __future__ import annotations
@@ -25,6 +30,8 @@ KEEP_SECONDS = 60.0
 # A caller segment is cut up to its max length (8 s) after the echo of its first words was
 # captured on the senior's side, so references slightly "after" the capture count too.
 FUTURE_SLACK_SECONDS = 10.0
+MIN_RUN_WORDS = 3  # shorter shared runs ("nie wiem", "tak tak") are kept as senior speech
+MIN_LEFT_WORDS = 2  # after stripping, fewer words than this = the whole segment was echo
 
 
 def normalise(text: str) -> str:
@@ -59,12 +66,7 @@ class EchoGuard:
         now = self._clock()
         while self._caller and self._caller[0][0] < now - KEEP_SECONDS:
             self._caller.popleft()
-        at = now if captured_at is None else captured_at
-        recent = [
-            (t, text)
-            for t, text in self._caller
-            if at - self.window_seconds <= t <= at + FUTURE_SLACK_SECONDS
-        ]
+        recent = self._recent(now if captured_at is None else captured_at)
         for _, caller in recent:
             if len(senior) >= MIN_CONTAINED_CHARS and senior in caller:
                 return True
@@ -78,6 +80,43 @@ class EchoGuard:
             if sum(w in caller_words for w in words) / len(words) >= WORD_OVERLAP:
                 return True
         return False
+
+    def remove_echo(self, senior_text: str, captured_at: float | None = None) -> str | None:
+        """Senior text without the echoed parts: None if it is all echo, the original text if
+        nothing matched, otherwise the remaining words (original spelling)."""
+        if self.is_echo(senior_text, captured_at):
+            return None
+        tokens = senior_text.split()
+        words: list[str] = []
+        owner: list[int] = []  # word index -> token index
+        for index, token in enumerate(tokens):
+            for word in normalise(token).split():
+                words.append(word)
+                owner.append(index)
+        reference = " ".join(text for _, text in self._recent(captured_at)).split()
+        if len(words) < MIN_RUN_WORDS or len(reference) < MIN_RUN_WORDS:
+            return senior_text
+        matcher = SequenceMatcher(None, words, reference, autojunk=False)
+        echoed = [False] * len(words)
+        for block in matcher.get_matching_blocks():
+            if block.size >= MIN_RUN_WORDS:
+                for i in range(block.a, block.a + block.size):
+                    echoed[i] = True
+        if not any(echoed):
+            return senior_text
+        keep = sorted({owner[i] for i, gone in enumerate(echoed) if not gone})
+        left = [tokens[i] for i in keep]
+        if sum(not gone for gone in echoed) < MIN_LEFT_WORDS:
+            return None
+        return " ".join(left)
+
+    def _recent(self, captured_at: float | None) -> list[tuple[float, str]]:
+        at = self._clock() if captured_at is None else captured_at
+        return [
+            (t, text)
+            for t, text in self._caller
+            if at - self.window_seconds <= t <= at + FUTURE_SLACK_SECONDS
+        ]
 
     def clear(self) -> None:
         self._caller.clear()

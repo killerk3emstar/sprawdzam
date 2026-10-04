@@ -15,7 +15,9 @@ import asyncio
 import contextlib
 import hmac
 import logging
-from collections.abc import Callable, Coroutine
+import math
+from collections.abc import Awaitable, Callable, Coroutine
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -50,6 +52,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 APP_QUEUE_FRAMES = 50  # 1 s of audio towards the app; oldest dropped beyond that
+# The caller always gets at least this long (or the whole timeout, if shorter) to type the
+# family password after the spoken request has finished.
+PASSWORD_GRACE_SECONDS = 3.0
 
 
 class CallState(StrEnum):
@@ -71,7 +76,8 @@ class CallBridge:
         provider_out: SafeSender,
         hub: AppHub,
         accept_timeout: float = 30.0,
-        verify_seconds: float = 20.0,
+        password_timeout: float = 12.0,
+        auto_block_seconds: float = 8.0,
         family_password: str = "",
         prompts: PromptLibrary | None = None,
         events: EventBus | None = None,
@@ -85,7 +91,8 @@ class CallBridge:
         self.provider_out = provider_out
         self.hub = hub
         self.accept_timeout = accept_timeout
-        self.verify_seconds = verify_seconds
+        self.password_timeout = password_timeout
+        self.auto_block_seconds = auto_block_seconds
         self._family_password = family_password
         self.prompts = prompts
         self.events = events
@@ -94,6 +101,9 @@ class CallBridge:
         self.senior_audio_sink: Callable[[bytes], None] | None = None
         # Text of every voice prompt played to the senior (echo guard reference).
         self.played_text_sink: Callable[[str], None] | None = None
+        # Follow-up (REST hang-up, trusted-person call) when the senior hangs up on a
+        # high-risk call outside the password / confirm stage (set by the stream handler).
+        self.on_senior_blocked: Callable[[], Awaitable[None]] | None = None
 
         self.state = CallState.RINGING
         self.ended = asyncio.Event()
@@ -111,6 +121,8 @@ class CallBridge:
         self._accept_timer: asyncio.Task[Any] | None = None
         self._dtmf = ""
         self._verify_future: asyncio.Future[bool] | None = None
+        # "verify" (verify_password pending) or "confirm" (confirm_block countdown) or None.
+        self.stage: str | None = None
         self.stats = {"to_app_frames": 0, "to_phone_frames": 0, "dropped_to_app": 0}
         # While a prompt plays to one side, that side's live audio from the other is muted.
         self._app_prompt = asyncio.Lock()
@@ -197,7 +209,14 @@ class CallBridge:
         assessment = self.last_assessment
         scam_type = assessment.scam_type.value if assessment else "none"
         reasons = [name for name, on in assessment.categories.items() if on] if assessment else []
-        text = compose_alert_text(scam_type, reasons, self.lang)
+        text = compose_alert_text(
+            scam_type,
+            reasons,
+            self.lang,
+            at=datetime.now(UTC),
+            caller=self.caller_display,
+            money_ask=assessment.rules.money_ask if assessment else None,
+        )
         try:
             await self.hub.send_trusted_alert(
                 self.call_id,
@@ -211,6 +230,32 @@ class CallBridge:
                 call_id=self.call_id,
                 error_type=type(exc).__name__,
             )
+
+    @property
+    def high_risk(self) -> bool:
+        """In the password / confirm stage, or the model's own score is sustained at or
+        above the hang-up threshold."""
+        if self.stage is not None:
+            return True
+        assessment = self.last_assessment
+        return bool(assessment is not None and getattr(assessment, "model_high", False))
+
+    async def senior_hangup(self) -> EndReason:
+        """The senior pressed hang up. During high risk this counts as blocking the scam
+        (`scam_blocked`: trusted person alerted, console shows it as blocked); otherwise it
+        is a normal `senior_hangup`."""
+        if self.state is not CallState.ACTIVE or not self.high_risk:
+            await self.end(EndReason.SENIOR_HANGUP)
+            return EndReason.SENIOR_HANGUP
+        in_stage = self.stage is not None
+        if self.events is not None:
+            self.events.action(self.call_id, "senior_blocked", "senior hung up during high risk")
+        log_event(logger, logging.WARNING, "senior_blocked", call_id=self.call_id, stage=self.stage)
+        await self.end(EndReason.SCAM_BLOCKED)
+        # In a stage the responder's own block path finishes the follow-up.
+        if not in_stage and self.on_senior_blocked is not None:
+            self.spawn_background(self.on_senior_blocked())
+        return EndReason.SCAM_BLOCKED
 
     async def app_detached(self) -> None:
         if self.state is not CallState.ENDED:
@@ -390,30 +435,46 @@ class CallBridge:
         if hmac.compare_digest(self._dtmf[-len(password) :].encode(), password.encode()):
             future.set_result(True)
 
+    def password_timeout_for(self) -> int:
+        """Seconds from `verify_password` to the block: PASSWORD_TIMEOUT_SECONDS, stretched so
+        the caller has a moment to type after the spoken request ends."""
+        prompt = len(self._caller_prompt_frames("password")) * 0.02
+        grace = min(PASSWORD_GRACE_SECONDS, self.password_timeout)
+        return max(1, math.ceil(max(self.password_timeout, prompt + grace)))
+
     async def verify_family_password(self, warn_first: bool = False) -> bool:
-        """Ask for the family password: `verify_password` to the app, a spoken request to the
-        caller and the senior (the senior first hears the warning if `warn_first`). Digits
-        count from the start of the prompt; the window closes `verify_seconds` after it.
-        False on timeout, call end, or when no password is configured (then no prompt)."""
-        await self.send_event(protocol.verify_password())
-        if self.events is not None:
-            self.events.action(self.call_id, "verify_password", "family password requested")
-        if not self._family_password or self.state is CallState.ENDED:
-            if self.events is not None:
-                self.events.action(self.call_id, "password_failed", "no family password set")
+        """High risk. With a family password: `verify_password` to the app and a spoken request
+        to both sides (the senior hears the warning first if `warn_first`); True when the
+        correct digits arrive within `timeoutSeconds` of the message. Without one:
+        `confirm_block` countdown, always False (blocked when it runs out or the senior hangs
+        up). False on call end."""
+        if self.state is CallState.ENDED:
             return False
-        self._dtmf = ""
+        if not self._family_password:
+            return await self._confirm_block(warn_first)
+        timeout = self.password_timeout_for()
+        self._dtmf = ""  # digits count from the request on
         future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
         self._verify_future = future
-        try:
-            app_names = ("warning", "password") if warn_first else ("password",)
+        self.stage = "verify"
+        await self.send_event(protocol.verify_password(timeout))
+        if self.events is not None:
+            self.events.action(self.call_id, "verify_password", "family password requested")
+        app_names = ("warning", "password") if warn_first else ("password",)
+
+        async def prompts() -> None:
             await asyncio.gather(self.play_to_caller("password"), self.play_to_app(*app_names))
-            if not future.done():
-                await asyncio.wait_for(asyncio.shield(future), self.verify_seconds)
+
+        playing = self._spawn(prompts())
+        try:
+            await asyncio.wait_for(asyncio.shield(future), timeout)
         except TimeoutError:
             pass
         finally:
             self._verify_future = None
+            self.stage = None
+            if not playing.done():
+                playing.cancel()
         self.verified = future.done() and future.result()
         if self.events is not None:
             self.events.action(
@@ -427,5 +488,29 @@ class CallBridge:
             "family_password_check",
             call_id=self.call_id,
             verified=self.verified,
+            timeout=timeout,
         )
         return self.verified
+
+    async def _confirm_block(self, warn_first: bool) -> bool:
+        """No family password: the app counts down `seconds`, then the call is blocked."""
+        seconds = max(1, math.ceil(self.auto_block_seconds))
+        future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+        self._verify_future = future  # resolved (False) by end(), e.g. the senior hanging up
+        self.stage = "confirm"
+        await self.send_event(protocol.confirm_block(seconds))
+        if self.events is not None:
+            self.events.action(
+                self.call_id, "confirm_block", f"no family password: blocking in {seconds} s"
+            )
+        if warn_first:
+            self._spawn(self.play_to_app("warning"))
+        try:
+            await asyncio.wait_for(asyncio.shield(future), seconds)
+        except TimeoutError:
+            pass
+        finally:
+            self._verify_future = None
+            self.stage = None
+        log_event(logger, logging.INFO, "auto_block_countdown_done", call_id=self.call_id)
+        return False
