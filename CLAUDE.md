@@ -2,11 +2,13 @@
 
 Hackathon HackYeah 2026 (Kraków, 3–4.10.2026). Dwie osoby, 24 h. Ten plik opisuje, **co budujemy, jakie decyzje już zapadły i jak z nami pracować**. Czytaj go na początku każdej sesji.
 
+> **ZMIANA PLANU (niedziela 4.10, ok. 3:30).** Zgłaszamy **tylko do Defence**. Huawei i HarmonyOS są zamrożone: kodu nie usuwamy, ale go nie rozwijamy i nie pracujemy nad .hap. Pitch: **B2B dla operatorów** (moduł Sprawdzam na serwerach operatora dostaje kopię dźwięku rozmów z nieznanych numerów), apka na Androida to dodatek **B2C** i na niej robimy demo. Twilio zostaje za adapterem w trybie dry-run, nic nie kupujemy. **Zamrożenie funkcji 9:00, zgłoszenie 10:45.** Szczegóły w sekcji „Plan od 4.10, 3:30” niżej; tam, gdzie reszta pliku mówi o Huawei, obowiązuje ta zmiana.
+
 Pełny plan dla ludzi (Claude Docs, nie otworzysz go z terminala): https://claude.ai/code/artifact/015c37c5-a70b-43ec-9dff-73d17d380d4b
 
 ## Jak z nami pracujesz
 
-- **Rozmawiasz z nami po polsku.** Kod, komentarze, README, dokumentacja i commity są po angielsku, bo Huawei ocenia wszystko po angielsku. Teksty w UI są w dwóch językach (PL i EN).
+- **Rozmawiasz z nami po polsku.** Kod, komentarze, dokumentacja techniczna (`docs/`) i commity są po angielsku. **README jest po polsku** (Defence, decyzja 4.10). Teksty w UI są w dwóch językach (PL i EN).
 - **Pytaj, gdy coś jest niejasne.** Przed większym krokiem (nowy moduł, zmiana architektury, nowa zależność, decyzja o UI) daj krótki plan i zbierz pytania w jednym miejscu. Do każdego pytania dodaj 2–3 opcje i swoją rekomendację.
 - **Proponuj lepsze rozwiązania i mów o ryzykach.** Chcemy Twoich sugestii. Decyzji z sekcji „Decyzje” nie zmieniaj jednak bez naszej zgody: zaproponuj zmianę i poczekaj na odpowiedź.
 - **Drobiazgi decydujesz sam.** Nazwy, struktura plików, drobne biblioteki i odwracalne szczegóły nie wymagają pytania.
@@ -23,9 +25,9 @@ Ochrona seniorów przed oszustwami telefonicznymi („na wnuczka”, „na polic
 - Backend zamienia mowę na tekst i na bieżąco ocenia ryzyko. Ryzyko średnie: ostrzeżenie głosowe i powiadomienie. Ryzyko wysokie: pytanie o hasło rodzinne, rozłączenie, telefon i SMS do osoby zaufanej (panel rodziny pominięty, decyzja 3.10).
 - Nie zapisujemy audio ani transkrypcji, tylko krótkie streszczenie alertu. Nie rozpoznajemy emocji ani biometrii głosu (AI Act: rozpoznawanie emocji z głosu to system wysokiego ryzyka).
 
-Zgłaszamy jeden projekt do dwóch zadań:
+Pierwotnie zgłaszaliśmy jeden projekt do dwóch zadań (od 4.10, 3:30 **tylko Defence**, Huawei zamrożone):
 
-- **Huawei „Imagine What's Next”** (25 tys. zł): aplikacja na HarmonyOS/OpenHarmony z API 20+, paczka .hap, angielski. Pełne wymagania: `reference/challenges/huawei_challenge.md`.
+- ~~**Huawei „Imagine What's Next”**~~ (zamrożone 4.10) (25 tys. zł): aplikacja na HarmonyOS/OpenHarmony z API 20+, paczka .hap, angielski. Pełne wymagania: `reference/challenges/huawei_challenge.md`.
 - **Defence** (8 tys. zł): PL albo EN, PDF z maks. 10 slajdami. Kryteria: pomysł 30%, zgodność z kategorią 20%, użyteczność 20%, design 20%, kompletność 10%. Szczegóły: `reference/challenges/defence.md`.
 
 Kryteria Huawei: oryginalność 20%, użyteczność 20%, wykonanie techniczne 20% (działa, testy, obsługa błędów, brak sekretów), **użycie możliwości platformy 20%** (apka, która działa wszędzie tak samo, dostaje tu mniej), demo 10%, odtwarzalność i przejrzystość pracy z AI 10%.
@@ -34,6 +36,7 @@ Kryteria Huawei: oryginalność 20%, użyteczność 20%, wykonanie techniczne 20
 
 | Temat | Decyzja |
 | --- | --- |
+| **Zakres (4.10, 3:30)** | **Tylko Defence.** Huawei/HarmonyOS zamrożone (kod zostaje, bez rozwoju, bez .hap). Pitch B2B dla operatorów, demo na apce Android (B2C) |
 | Apka | React Native **0.77.1** + RNOH **0.77.75** (`@react-native-oh/react-native-harmony`, `@react-native-oh/react-native-harmony-cli`). Jeden kod na Androida i HarmonyOS |
 | Funkcje systemowe | Moduły natywne (TurboModules): ArkTS na HarmonyOS, Kotlin na Androidzie |
 | Wersje SDK HarmonyOS | `compatibleSdkVersion` = `6.0.0(20)` (minimum wymagane przez Huawei, nie obniżać), kompilacja i cel API 24 (`6.1.1(24)`), emulator z najnowszym obrazem |
@@ -41,13 +44,31 @@ Kryteria Huawei: oryginalność 20%, użyteczność 20%, wykonanie techniczne 20
 | Backend | Python, FastAPI, WebSockety |
 | Mowa na tekst | Whisper large-v3-turbo (whisper.cpp, `whisper-server` z Homebrew, Metal), na Macu natywnie, ok. 0,5 s na kawałek. Kawałki 3–8 s cięte po pauzach. Język wymuszony z ustawień seniora (PL albo EN) |
 | Ocena ryzyka | **basal-1.0-4.5B** (`Remek/basal-1.0-4.5B`, polski model decyzyjny na bazie Bielika, Apache 2.0) + reguły słów kluczowych. Lżejszy zapas: `basal-1.0-1.5B` (to samo API, ok. 3 razy szybszy). Clef-Flash (`Cloudflare/clef-flash`, 19 GB) do porównania, głównie po angielsku, pobieramy dopiero, jeśli starczy czasu (łącze to hotspot). Zapas na CPU: embeddingi `PKOBP/embed-modernbert-68m` + regresja logistyczna |
-| Telefonia | Twilio, dwukierunkowe Media Streams (`<Connect><Stream>`; na koncie próbnym `<Stream>` jest zablokowany). Polski numer: Zadarma (przekierowanie na SIP → Twilio SIP Domain) albo numer Twilio PL; numer z USA tylko awaryjnie. Zakup konta (min. 20 USD) odkładamy do pierwszego prawdziwego telefonu; kod operatora siedzi za adapterem, tańsza alternatywa to SignalWire (cXML, ok. 5 USD, cena niesprawdzona) |
+| Telefonia | **Od 4.10: Twilio niepotrzebne do demo, zostaje za adapterem w dry-run, nic nie kupujemy.** Dawniej: Twilio, dwukierunkowe Media Streams (`<Connect><Stream>`; na koncie próbnym `<Stream>` jest zablokowany). Polski numer: Zadarma (przekierowanie na SIP → Twilio SIP Domain) albo numer Twilio PL; numer z USA tylko awaryjnie. Zakup konta (min. 20 USD) odkładamy do pierwszego prawdziwego telefonu; kod operatora siedzi za adapterem, tańsza alternatywa to SignalWire (cXML, ok. 5 USD, cena niesprawdzona) |
 | Testy połączeń w trakcie budowy | Z przeglądarki, przez nasze strony `/dev/caller` (dzwoniący, format Twilio Media Streams) i `/dev/senior` (zastępuje apkę), bez operatora i bez kosztów. Z telefonu tylko test przekierowania i demo |
 | Wdrożenie | docker compose. Na Macu modele działają natywnie (Docker na Macu nie daje kontenerom GPU), backend w kontenerze łączy się z nimi przez `host.docker.internal`. Na AWS jedna maszyna EC2 + Caddy z automatycznym HTTPS |
 | Języki | PL i EN wszędzie: UI, komunikaty głosowe, rozpoznawanie mowy, reguły, scenariusze testowe |
 | UI apki seniora | Minimalny, duży, kontrastowy: jeden duży status na ekranie głównym, pełnoekranowe połączenie przychodzące i ostrzeżenie, ustawienia schowane. Tekst od 24 pt, przyciski od 56 dp, kontrast WCAG AA (decyzja 3.10) |
+| Ekran dla jury / panel operatora (4.10) | Strona na MacBooku (projektor): transkrypcja na żywo obu stron, wykres ryzyka z progami 50 i 90, powody i typ oszustwa, akcje; dopisek „Tryb demonstracyjny. W produkcji treść rozmów nie jest wyświetlana.” Druga zakładka: lista alertów jak u operatora, bez treści rozmów |
+| SMS do osoby zaufanej (4.10) | Wysyła **telefon babci** (`SmsManager`, `SEND_SMS` w czasie działania, numer z ustawień) po wiadomości z backendu o rozłączeniu z powodu oszustwa; treść bez polskich znaków i linków; maks. jeden alert na rozmowę po stronie serwera |
+| Reguły vs rozłączenie (4.10) | Same reguły mogą ostrzegać, **nie mogą rozłączać** (nie rozumieją zaprzeczeń). Analizujemy też wypowiedzi seniora |
 | Panel rodziny | **Pomijamy** (decyzja 3.10). Rodzina dostaje SMS i telefon do osoby zaufanej. Hasło rodzinne na razie w `.env` (`FAMILY_PASSWORD`), ewentualnie później w ustawieniach apki |
 | Funkcje HarmonyOS w apce | Notification Kit (alerty), Contacts Kit (osoba zaufana i biała lista), Call Service Kit (voipCall) po krótkim teście na emulatorze. Widżet odpuszczamy (decyzja 3.10) |
+
+## Plan od 4.10, 3:30 (Defence)
+
+Sprzęt na demo: iPhone 1 = oszust, Android z kartą SIM = telefon babci, iPhone 2 = wnuczka (osoba zaufana), MacBook = serwer z modelami i ekran na projektor. Emulator Androida służy do pracy; prawdziwy SMS wyśle tylko fizyczny Android.
+
+Priorytety, jeśli zabraknie czasu:
+
+1. Pełny przepływ na fizycznym Androidzie z symulatorem sieci (`/dev/caller` jako „Symulator sieci operatora”: Safari na iPhonie przez Cloudflare Tunnel, duży przycisk „Zadzwoń”, nagrany skrypt albo mikrofon; skrypty PL/EN: policjant, wnuczek, zwykła rozmowa; zapas: laptop). Na telefonie: pełny ekran połączenia, odbiór, dźwięk w obie strony, pasek ryzyka z powodami, klawiatura hasła rodzinnego, rozłączenie, ekran wyniku. Echo: domyślnie skrypt z pliku, sprawdzić, czy głos z głośnika apki nie wraca jako wypowiedź seniora.
+2. SMS do osoby zaufanej z telefonu babci (rozszerzenie protokołu v0 w `docs/APP_PROTOCOL.md`).
+3. Ekran dla jury i panel operatora.
+4. Analiza wypowiedzi seniora i reguły bez rozłączania; fail-open (apka: „Ochrona chwilowo niedostępna”, komunikat „proszę zadzwonić później” usunąć/zmienić).
+5. README po polsku, `docs/ARCHITECTURE.md` (sekcje „Docelowe wdrożenie u operatora” i „Pilotaż B2C z przekierowaniem i routing”, wyraźnie oznaczone jako zaprojektowane, nie zbudowane).
+6. Routing na wspólny numer (dopasowanie po zgłoszeniu z apki „odrzuciłam +48…, godz. …”), tylko jeśli zostanie czas.
+
+Na koniec: checklista „setup od zera w 5 minut” (modele → backend → tunel → apka → strony; `scrcpy` dla Androida, QuickTime dla iPhone'a; plan B: nagranie wideo demo). Kryteria Defence: pomysł 30%, zgodność z kategorią 20%, użyteczność 20%, design 20%, kompletność 10%; PDF maks. 10 slajdów; trzeba ujawnić użycie AI i usług zewnętrznych.
 
 ## Architektura
 
@@ -175,7 +196,15 @@ Dokumentacja RNOH (EN): https://gitcode.com/CPF-RN/ohos_react_native/tree/0.77-m
 - 07:00–09:00: wygląd, PL/EN, README, podpisany .hap.
 - 09:00–10:45: nagranie demo, PDF, zgłoszenia. **Termin: niedziela 11:00.**
 
-## Wymagane na koniec (Huawei)
+## Wymagane na koniec (Defence, od 4.10)
+
+- [ ] PDF, maks. 10 slajdów (PL albo EN)
+- [ ] Demo na żywo: iPhone (symulator sieci) → Android babci → SMS do wnuczki; ekran jury na projektorze
+- [ ] Nagranie wideo demo jako plan B
+- [ ] README po polsku, `docs/ARCHITECTURE.md`, `docs/AI_FEATURES.md`, `AI_WORKFLOW.md` (ujawnienie AI i usług zewnętrznych)
+- [ ] Brak sekretów w repo i w historii
+
+## Wymagane na koniec (Huawei, zamrożone 4.10)
 
 - [ ] Publiczne repo z historią commitów
 - [ ] README: wersje (DevEco, SDK, Node, RNOH), build, instalacja, uruchomienie od zera
@@ -206,8 +235,8 @@ Na początku każdej sesji przeczytaj `AI_WORKFLOW.md` i dopisz nowe narzędzia 
 
 ## Otwarte pytania (pytaj, gdy staną się potrzebne)
 
-- Czy jeden projekt można zgłosić do Defence i Huawei?
-- Odpowiedzi mentorów Huawei: Call Service Kit i mikrofon na emulatorze, znane problemy RNOH 0.77 z API 20+, podpis .hap pod ich telefon.
+- ~~Czy jeden projekt można zgłosić do Defence i Huawei?~~ Nieaktualne: od 4.10 tylko Defence.
+- (Nieaktualne od 4.10) Odpowiedzi mentorów Huawei: Call Service Kit i mikrofon na emulatorze, znane problemy RNOH 0.77 z API 20+, podpis .hap pod ich telefon.
 - Który numer przejdzie weryfikację (Zadarma, Twilio PL)?
 - Czy mamy konto AWS i jaki ma limit na maszyny z GPU?
 - ~~Hasło rodzinne ustawiane w panelu rodziny?~~ Panel pominięty (3.10): hasło w `.env`, później może w ustawieniach apki.
