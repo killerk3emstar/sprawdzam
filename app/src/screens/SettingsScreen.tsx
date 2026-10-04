@@ -9,6 +9,7 @@ import React, {useState} from 'react';
 import {SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View} from 'react-native';
 import {BigButton} from '../components/BigButton';
 import {useI18n, type Lang} from '../i18n';
+import {toControlUrl} from '../deepLink';
 import type {Settings} from '../settings';
 import {colors, font, size} from '../theme';
 
@@ -16,6 +17,9 @@ type Props = {
   settings: Settings;
   notificationsEnabled: boolean | null;
   whitelistCount: number | null;
+  /** Android: SEND_SMS granted; null where SMS is not supported. */
+  smsAllowed: boolean | null;
+  onAllowSms: () => void;
   onChange: (next: Settings) => void;
   onPickTrustedPerson: (() => void) | null;
   onSyncContacts: (() => void) | null;
@@ -66,6 +70,19 @@ export function SettingsScreen(props: Props): React.JSX.Element {
         {props.onPickTrustedPerson ? (
           <BigButton label={t('chooseFromContacts')} onPress={props.onPickTrustedPerson} variant="neutral" />
         ) : null}
+        {props.smsAllowed === true ? (
+          <Text style={[styles.value, styles.spaced]} testID="sms-permission-on">
+            {t('smsPermissionOn')}
+          </Text>
+        ) : props.smsAllowed === false ? (
+          <BigButton
+            label={t('smsPermissionOff')}
+            onPress={props.onAllowSms}
+            variant="neutral"
+            style={styles.spaced}
+            testID="allow-sms"
+          />
+        ) : null}
 
         <Text style={styles.section}>{t('whitelist')}</Text>
         {whitelistCount !== null ? (
@@ -111,7 +128,10 @@ export function SettingsScreen(props: Props): React.JSX.Element {
         <BigButton
           label={saved ? t('saved') : t('saveAndConnect')}
           onPress={() => {
-            onChange({...settings, controlUrl: url.trim(), deviceToken: token.trim()});
+            // A pasted tunnel address (https://x.trycloudflare.com) becomes wss://x.trycloudflare.com/app/control.
+            const controlUrl = toControlUrl(url) ?? url.trim();
+            setUrl(controlUrl);
+            onChange({...settings, controlUrl, deviceToken: token.trim()});
             setSaved(true);
           }}
           variant="neutral"

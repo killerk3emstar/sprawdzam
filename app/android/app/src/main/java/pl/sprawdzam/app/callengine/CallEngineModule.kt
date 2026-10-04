@@ -33,6 +33,7 @@ class CallEngineModule(reactContext: ReactApplicationContext) :
   private val control = ControlChannel(client, this)
   private val settings = SettingsStore(reactContext)
   private val notifier = CallNotifier(reactContext).apply { lang = settings.lang() }
+  private val trustedSms = TrustedSms(reactContext)
   @Volatile private var call: CallSession? = null
   private var pendingPick: Promise? = null
   private var pendingPickIsWhitelist = false
@@ -51,11 +52,16 @@ class CallEngineModule(reactContext: ReactApplicationContext) :
       return
     }
     control.connect(url, deviceToken)
+    ProtectionService.start(reactApplicationContext)
+    if (!notifier.canUseFullScreenIntent()) {
+      Log.w(TAG, "full-screen intent not allowed: incoming calls in the background show only a notification")
+    }
     promise.resolve(null)
   }
 
   override fun disconnectControl(promise: Promise) {
     control.disconnect()
+    ProtectionService.stop(reactApplicationContext)
     promise.resolve(null)
   }
 
@@ -75,6 +81,8 @@ class CallEngineModule(reactContext: ReactApplicationContext) :
       }
       try {
         session.accept()
+        notifier.cancelIncoming()
+        ProtectionService.setInCall(true)
         emit(Protocol.EVENT_CALL_ACTIVE, Arguments.createMap().apply { putString("callId", session.callId) })
         promise.resolve(null)
       } catch (e: Exception) {
@@ -140,8 +148,9 @@ class CallEngineModule(reactContext: ReactApplicationContext) :
       Log.w(TAG, "ignoring incoming call: another call in progress")
       return
     }
-    val session = CallSession(callId, callUrl, client, this)
+    val session = CallSession(callId, callUrl, client, this, reactApplicationContext)
     call = session
+    showOverLockScreen(true)
     notifier.incomingCall(caller)
     emit(Protocol.EVENT_INCOMING_CALL, Arguments.createMap().apply {
       putString("callId", callId)
@@ -151,11 +160,31 @@ class CallEngineModule(reactContext: ReactApplicationContext) :
     session.connect()
   }
 
-  override fun onProtectionStatus(available: Boolean, connected: Boolean) =
-      emit(Protocol.EVENT_PROTECTION_STATUS, Arguments.createMap().apply {
+  override fun onProtectionStatus(available: Boolean, connected: Boolean) {
+    ProtectionService.setProtected(reactApplicationContext, available, settings.lang())
+    emit(Protocol.EVENT_PROTECTION_STATUS, Arguments.createMap().apply {
         putBoolean("available", available)
         putBoolean("connected", connected)
       })
+  }
+
+  override fun onAlertTrusted(callId: String, scamType: String, reasons: List<String>, text: String) {
+    val person = settings.trustedPerson()
+    val name = person?.optString("name", "") ?: ""
+    val accepted = trustedSms.send(callId, person?.optString("number", ""), text) { r ->
+      val msg = JSONObject().put("type", "alert_trusted_result").put("callId", r.callId).put("sent", r.sent)
+      if (r.error != null) msg.put("error", r.error)
+      control.sendReliably(msg.toString())
+      Log.i(TAG, "alert_trusted $callId: sent=${r.sent} error=${r.error}")
+      emit(Protocol.EVENT_TRUSTED_ALERT, Arguments.createMap().apply {
+        putString("callId", r.callId)
+        putBoolean("sent", r.sent)
+        if (r.error != null) putString("error", r.error) else putNull("error")
+        putString("name", name)
+      })
+    }
+    if (!accepted) Log.i(TAG, "alert_trusted $callId: duplicate, ignored")
+  }
 
   // --- Call session ---
 
@@ -177,6 +206,8 @@ class CallEngineModule(reactContext: ReactApplicationContext) :
 
   override fun onCallEnded(callId: String, reason: String) {
     notifier.callEnded(reason)
+    ProtectionService.setInCall(false)
+    showOverLockScreen(false)
     emit(Protocol.EVENT_CALL_ENDED, Arguments.createMap().apply {
       putString("callId", callId)
       putString("reason", reason)
@@ -269,6 +300,16 @@ class CallEngineModule(reactContext: ReactApplicationContext) :
       } else {
         false
       }
+    }
+  }
+
+  /** Lets the incoming-call / in-call UI appear over the lock screen and wake the display. */
+  private fun showOverLockScreen(on: Boolean) {
+    val activity = reactApplicationContext.currentActivity ?: return
+    if (Build.VERSION.SDK_INT < 27) return
+    activity.runOnUiThread {
+      activity.setShowWhenLocked(on)
+      activity.setTurnScreenOn(on)
     }
   }
 

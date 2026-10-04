@@ -8,8 +8,10 @@
  */
 
 import React, {useCallback, useEffect, useState} from 'react';
-import {Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View} from 'react-native';
+import {Linking, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {DevCallPanel} from './src/DevCallPanel';
+import {parseConfigLink} from './src/deepLink';
+import {hasSmsPermission, requestSmsPermission, smsSupported} from './src/smsPermission';
 import {I18nProvider} from './src/i18n';
 import {CallEngine} from './src/native/CallEngine';
 import {CallEndedScreen} from './src/screens/CallEndedScreen';
@@ -28,7 +30,29 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
   const [route, setRoute] = useState<Route>('home');
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean | null>(null);
   const [whitelistCount, setWhitelistCount] = useState<number | null>(null);
+  const [smsAllowed, setSmsAllowed] = useState<boolean | null>(null);
   const {call} = engine;
+  const idle = call.phase === 'idle';
+
+  const askSms = useCallback(() => {
+    requestSmsPermission().then(setSmsAllowed);
+  }, []);
+
+  // SMS to the trusted person: ask at start when a trusted person exists (never in the middle of a call).
+  const hasTrusted = !!settings.trustedPerson;
+  useEffect(() => {
+    if (!smsSupported) {
+      return;
+    }
+    hasSmsPermission().then(ok => {
+      setSmsAllowed(ok);
+      if (!ok && hasTrusted && idle && settings.notificationsAsked) {
+        askSms();
+      }
+    });
+    // Only on start and when the trusted person changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasTrusted, settings.notificationsAsked]);
 
   useEffect(() => {
     if (engine.available) {
@@ -38,10 +62,15 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
 
   const pickTrustedPerson = useCallback(() => {
     CallEngine.pickTrustedPerson().then(
-      person => person && onSettingsChange({...settings, trustedPerson: person}),
+      person => {
+        if (person) {
+          onSettingsChange({...settings, trustedPerson: person});
+          askSms();
+        }
+      },
       () => {},
     );
-  }, [settings, onSettingsChange]);
+  }, [settings, onSettingsChange, askSms]);
 
   const syncContacts = useCallback(() => {
     CallEngine.pickWhitelistContacts().then(setWhitelistCount, () => {});
@@ -85,7 +114,8 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
       );
     }
     if (call.phase === 'ended' && call.endReason) {
-      return <CallEndedScreen reason={call.endReason} onOk={engine.dismissEnded} />;
+      const alert = engine.trustedAlert?.callId === call.callId ? engine.trustedAlert : null;
+      return <CallEndedScreen reason={call.endReason} trustedAlert={alert} onOk={engine.dismissEnded} />;
     }
   }
 
@@ -95,6 +125,8 @@ function Main({settings, onSettingsChange}: {settings: Settings; onSettingsChang
         settings={settings}
         notificationsEnabled={notificationsEnabled}
         whitelistCount={whitelistCount}
+        smsAllowed={smsSupported ? smsAllowed : null}
+        onAllowSms={askSms}
         onChange={onSettingsChange}
         onPickTrustedPerson={engine.available ? pickTrustedPerson : null}
         onSyncContacts={engine.available ? syncContacts : null}
@@ -148,6 +180,26 @@ function App(): React.JSX.Element {
     setSettings(next);
     saveSettings(next);
   }, []);
+
+  // Dev/demo: sprawdzam://config?url=...&token=... sets the backend address (see src/deepLink.ts).
+  useEffect(() => {
+    if (!settings) {
+      return;
+    }
+    const apply = (link: string | null) => {
+      const cfg = link ? parseConfigLink(link) : null;
+      if (cfg) {
+        setSettings(prev => {
+          const next = {...(prev ?? DEFAULT_SETTINGS), ...cfg};
+          saveSettings(next);
+          return next;
+        });
+      }
+    };
+    Linking.getInitialURL().then(apply, () => {});
+    const sub = Linking.addEventListener('url', e => apply(e.url));
+    return () => sub.remove();
+  }, [settings === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!settings) {
     return (

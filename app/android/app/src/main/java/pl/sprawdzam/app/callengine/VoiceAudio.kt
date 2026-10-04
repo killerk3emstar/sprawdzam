@@ -1,11 +1,17 @@
 package pl.sprawdzam.app.callengine
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
+import android.os.Build
 import android.util.Log
 import java.util.ArrayDeque
 import kotlin.concurrent.thread
@@ -14,8 +20,17 @@ import kotlin.concurrent.thread
  * Full-duplex call audio: AudioRecord (VOICE_COMMUNICATION, 16 kHz mono PCM16) -> 20 ms frames -> onFrame;
  * frames from the call socket -> bounded jitter queue (60 ms prebuffer, 200 ms cap) -> AudioTrack
  * (USAGE_VOICE_COMMUNICATION). Same behaviour as the HarmonyOS VoiceAudio.
+ *
+ * Speakerphone: the senior's phone usually lies on the table next to the caller's, so the call runs in
+ * MODE_IN_COMMUNICATION on the built-in speaker, with the platform echo canceller and noise suppressor
+ * attached to the capture session when the device has them (the VOICE_COMMUNICATION source already enables
+ * the vendor AEC on most phones; the explicit effects make it deterministic).
  */
-class VoiceAudio {
+class VoiceAudio(context: Context) {
+  private val audioManager = context.getSystemService(AudioManager::class.java)
+  private var savedMode = AudioManager.MODE_NORMAL
+  private var savedSpeaker = false
+  private var effects: List<android.media.audiofx.AudioEffect> = emptyList()
   private val lock = Object()
   private val queue = ArrayDeque<ByteArray>()
   private var queuedBytes = 0
@@ -64,6 +79,8 @@ class VoiceAudio {
         .build()
     record = rec
     track = trk
+    enterCommunicationMode()
+    effects = attachEffects(rec.audioSessionId)
     rec.startRecording()
     trk.play()
 
@@ -120,6 +137,9 @@ class VoiceAudio {
   fun stop() {
     if (!running) return
     running = false
+    effects.forEach { runCatching { it.release() } }
+    effects = emptyList()
+    leaveCommunicationMode()
     runCatching { record?.stop() }
     runCatching { record?.release() }
     runCatching { track?.stop() }
@@ -132,6 +152,58 @@ class VoiceAudio {
       buffering = true
     }
     Log.i(TAG, "audio stopped ($stats)")
+  }
+
+  private fun enterCommunicationMode() {
+    runCatching {
+      savedMode = audioManager.mode
+      @Suppress("DEPRECATION")
+      savedSpeaker = audioManager.isSpeakerphoneOn
+      audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+      if (Build.VERSION.SDK_INT >= 31) {
+        val speaker = audioManager.availableCommunicationDevices.firstOrNull {
+          it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+        }
+        val ok = speaker != null && audioManager.setCommunicationDevice(speaker)
+        Log.i(TAG, "audio: speakerphone ${if (ok) "on" else "unavailable"}")
+      } else {
+        @Suppress("DEPRECATION")
+        audioManager.isSpeakerphoneOn = true
+      }
+    }.onFailure { Log.w(TAG, "audio: cannot switch to speakerphone: ${it.message}") }
+  }
+
+  private fun leaveCommunicationMode() {
+    runCatching {
+      if (Build.VERSION.SDK_INT >= 31) {
+        audioManager.clearCommunicationDevice()
+      } else {
+        @Suppress("DEPRECATION")
+        audioManager.isSpeakerphoneOn = savedSpeaker
+      }
+      audioManager.mode = savedMode
+    }
+  }
+
+  private fun attachEffects(sessionId: Int): List<android.media.audiofx.AudioEffect> {
+    val out = mutableListOf<android.media.audiofx.AudioEffect>()
+    val names = mutableListOf<String>()
+    if (AcousticEchoCanceler.isAvailable()) {
+      runCatching { AcousticEchoCanceler.create(sessionId) }.getOrNull()?.let {
+        it.enabled = true
+        out += it
+        names += "AEC"
+      }
+    }
+    if (NoiseSuppressor.isAvailable()) {
+      runCatching { NoiseSuppressor.create(sessionId) }.getOrNull()?.let {
+        it.enabled = true
+        out += it
+        names += "NS"
+      }
+    }
+    Log.i(TAG, "audio: effects ${if (names.isEmpty()) "none available" else names.joinToString("+")}")
+    return out
   }
 
   companion object {

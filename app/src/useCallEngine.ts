@@ -8,6 +8,7 @@ import {
   isCallEngineAvailable,
   type ProtectionStatus,
   type RiskUpdate,
+  type TrustedAlert,
 } from './native/CallEngine';
 
 export type CallPhase = 'idle' | 'ringing' | 'connecting' | 'active' | 'ended';
@@ -40,6 +41,8 @@ export type CallEngineState = {
   available: boolean;
   protection: ProtectionStatus | null;
   call: CallView;
+  /** Latest SMS-to-trusted-person result (may arrive before or after call_ended). */
+  trustedAlert: TrustedAlert | null;
   accept: () => void;
   reject: () => void;
   hangup: () => void;
@@ -56,6 +59,7 @@ export function useCallEngine(controlUrl: string, deviceToken: string): CallEngi
   const available = isCallEngineAvailable();
   const [protection, setProtection] = useState<ProtectionStatus | null>(null);
   const [call, setCall] = useState<CallView>(IDLE_CALL);
+  const [trustedAlert, setTrustedAlert] = useState<TrustedAlert | null>(null);
   const callRef = useRef(call);
   callRef.current = call;
 
@@ -65,6 +69,7 @@ export function useCallEngine(controlUrl: string, deviceToken: string): CallEngi
     }
     const subs = [
       CallEngine.addListener('protectionStatus', setProtection),
+      CallEngine.addListener('trustedAlert', setTrustedAlert),
       CallEngine.addListener('incomingCall', c =>
         setCall({...IDLE_CALL, phase: 'ringing', callId: c.callId, caller: c.caller}),
       ),
@@ -132,6 +137,7 @@ export function useCallEngine(controlUrl: string, deviceToken: string): CallEngi
     available,
     protection,
     call,
+    trustedAlert,
     accept,
     reject: hangup,
     hangup,
