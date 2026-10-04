@@ -4,7 +4,7 @@
 set -euo pipefail
 
 STATE="${SPRAWDZAM_DEMO_DIR:-${TMPDIR:-/tmp}/sprawdzam-demo}"
-names=(tunnel adb-watch backend)
+names=(tunnel adb-watch keep-warm backend)
 [[ "${1:-}" == "--all" ]] && names+=(basal whisper)
 
 for name in "${names[@]}"; do

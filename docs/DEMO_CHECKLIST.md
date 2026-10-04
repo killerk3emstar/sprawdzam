@@ -6,6 +6,8 @@ Wszystkie polecenia uruchamiamy w katalogu repo: `cd ~/Dev/HackYeah/2026/sprawdz
 ## 0. Przed wejściem na salę (raz)
 
 - [ ] Wszystko naładowane, Mac na zasilaczu (modele mocno grzeją), kabel USB-C do Samsunga i kabel do iPhone'a 1 (pokazywanie ekranu).
+- [ ] **Pamięć Maca:** zamknij wszystko, co zjada RAM: inne projekty (np. serwer GS_task, ~36 GB), emulator Androida, Docker/maszyny wirtualne, demony Gradle (`cd app/android && ./gradlew --stop`). Przy braku pamięci macOS wyrzuca modele na dysk i pierwsza rozmowa przez ok. 50 s działa na samych regułach. `demo-up.sh` uruchamia też `keep-warm`, który co 30 s „budzi” modele między rozmowami.
+- [ ] 2 min przed wejściem: jedna próbna rozmowa (np. „Zwykła rozmowa”), żeby modele były gorące.
 - [ ] Mac i iPhone 1 mają internet (hotspot albo Wi-Fi sali). Samsung internetu **nie potrzebuje**: łączy się z Makiem przez kabel. SMS idzie przez sieć komórkową.
 - [ ] Samsung: apka zainstalowana (`app/scripts/install-demo-android.sh --serial RFCNC0JPWDM`), w ustawieniach apki osoba zaufana = „Wnuczka TEST”, zgoda na SMS. Wygaszanie ekranu: 10 min, tryb „Nie przeszkadzać” wyłączony, głośność rozmowy ok. 60%.
 - [ ] Token urządzenia: w `server/.env.dev` ustaw losowy `APP_DEVICE_TOKEN` (`openssl rand -hex 16`), nie domyślny z repo (tunel jest publiczny), i przekaż go apce: `adb -s RFCNC0JPWDM shell am start -a android.intent.action.VIEW -d "'sprawdzam://config?url=ws://localhost:8765/app/control&token=<TOKEN>'" pl.sprawdzam.app`.

@@ -63,6 +63,11 @@ m = h["models"]
 print(f"  stt warmup: {m['stt']['warmup']}  decision warmup: {m['decision']['warmup']}  "
       f"prompts: {all(h['voice_prompts'].values())}  dry_run: {h['limits']['dry_run']}")
 EOF
+if alive keep-warm; then ok "keep-warm already running"; else
+  # Pings both models every 30 s between calls so macOS does not page the weights out.
+  start_bg keep-warm bash -c 'set -a; source .env.dev; set +a; exec uv run python scripts/keep_warm.py --every 30'
+  ok "keep-warm started (models stay in memory between calls)"
+fi
 cd "$ROOT"
 
 say "3/5 Android phone (USB)"
