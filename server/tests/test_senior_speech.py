@@ -208,3 +208,47 @@ def test_app_microphone_is_transcribed_as_senior(make_client):
             stream.send_json(stop_message())
             receive_json(app_ws, "call_ended")
         drain_until_close(stream)
+
+
+async def test_echo_of_a_voice_prompt_is_dropped():
+    from app.prompts import VOICE_PROMPTS
+
+    stt = ScriptedSTT([], ["Ta rozmowa może być próbą oszustwa."])
+    session = make_session(stt)
+    session.echo_guard.add_caller(VOICE_PROMPTS["warning"]["pl"])  # what the bridge reports
+    session.start()
+    session._enqueue("senior", tone(2.0, 0.6))
+    await wait_for(lambda: session.stats["echo_dropped"] == 1)
+    assert len(session.transcript) == 0
+    await session.close()
+
+
+def test_echo_window_counts_from_capture_time():
+    clock = Clock()
+    guard = EchoGuard(clock=clock)
+    guard.add_caller(CALLER)
+    captured = clock.now + 5
+    clock.now += 25  # transcribed late, but captured 5 s after the caller spoke
+    assert guard.is_echo(CALLER, captured_at=captured)
+    assert not guard.is_echo(CALLER)  # judged at "now" it is outside the window
+
+
+async def test_stale_senior_segments_are_skipped(monkeypatch):
+    monkeypatch.setattr("app.session.SENIOR_MAX_WAIT_SECONDS", 0.0)
+    stt = ScriptedSTT([], [SENIOR])
+    session = make_session(stt)
+    session._enqueue("senior", tone(2.0, 0.6))
+    await asyncio.sleep(0.01)
+    session.start()
+    await asyncio.sleep(0.2)
+    assert stt.order == [] and session.stats["dropped_segments"] == 1
+    await session.close()
+
+
+def test_echo_of_the_start_of_a_longer_caller_segment():
+    clock = Clock()
+    guard = EchoGuard(clock=clock)
+    captured = clock.now  # the senior side cut "Cześć mamo, tu Kasia." first
+    guard.add_caller("Cześć mamo, tu Kasia. Jak się czujesz po wizycie?", at=captured + 4)
+    clock.now += 6
+    assert guard.is_echo("Cześć mamo, tu Kasia.", captured_at=captured)

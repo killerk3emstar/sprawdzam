@@ -300,6 +300,7 @@ class StreamHandler:
             events=services.events,
         )
         bridge.senior_audio_sink = session.feed_senior_pcm16
+        bridge.played_text_sink = session.echo_guard.add_caller
         session.start()
         self.session, self.bridge = session, bridge
         services.sessions[call_id] = session

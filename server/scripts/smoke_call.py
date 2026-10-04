@@ -6,7 +6,15 @@ Plays both sides with Python clients:
   WAV file in real time (8 kHz mu-law WAV is sent as is; PCM WAV is converted).
 
 Prints a timeline (seconds from the stream start) of risk events, verify_password and
-call_ended, and how much prompt audio the caller received. Usage (from `server/`):
+call_ended, and how much prompt audio the caller received. It also:
+* subscribes to `WS /dev/events` (the jury / operator console stream) and summarises it;
+* answers `alert_trusted` on the control channel with `alert_trusted_result` (sent: true)
+  and counts how many alerts arrived (expected: exactly one for a blocked call);
+* with `--senior-audio WAV` streams that clip as the senior's microphone, starting
+  `--senior-at` seconds after the answer (real senior speech for the transcript);
+* with `--echo-gain G` plays the caller audio the app receives back into the call as the
+  senior's microphone at gain G (a speaker-to-mic leak), to exercise the echo guard.
+Usage (from `server/`):
 
     APP_DEVICE_TOKEN=... uv run python scripts/smoke_call.py \\
         --audio ~/models/sprawdzam/audio/pl_scam_police_8k_ulaw.wav --lang pl
@@ -31,7 +39,7 @@ import websockets
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.audio.g711 import mulaw_encode  # noqa: E402
+from app.audio.g711 import mulaw_decode, mulaw_encode  # noqa: E402
 from app.audio.resample import resample  # noqa: E402
 
 STREAM_SID = "MZ" + "7" * 32
@@ -64,9 +72,55 @@ def read_wav_as_mulaw(path: Path) -> bytes:
     raise SystemExit(f"{path}: unsupported WAV format tag={tag} bits={bits}")
 
 
+async def collect_events(ws_base: str, sink: list[dict], stop: asyncio.Event) -> None:
+    with contextlib.suppress(Exception):
+        async with websockets.connect(f"{ws_base}/dev/events") as events:
+            while not stop.is_set():
+                with contextlib.suppress(TimeoutError):
+                    sink.append(json.loads(await asyncio.wait_for(events.recv(), 0.5)))
+
+
+def summarise_events(events: list[dict], call_id: str) -> dict:
+    mine = [e for e in events if e.get("callId") == call_id]
+    kinds: dict[str, int] = {}
+    for event in mine:
+        kinds[event["type"]] = kinds.get(event["type"], 0) + 1
+    speakers: dict[str, int] = {}
+    for event in mine:
+        if event["type"] == "transcript":
+            speakers[event["speaker"]] = speakers.get(event["speaker"], 0) + 1
+    ended = next((e for e in mine if e["type"] == "call_ended"), None)
+    return {
+        "hello": bool(events) and events[0].get("type") == "hello",
+        "counts": kinds,
+        "transcript_speakers": speakers,
+        "actions": [e["action"] for e in mine if e["type"] == "action"],
+        "risk_sources": sorted({e["source"] for e in mine if e["type"] == "risk"}),
+        "call_ended_reason": ended and ended["reason"],
+        "alert": ended and ended["alert"],
+    }
+
+
 async def run(args: argparse.Namespace) -> dict:
     base = args.base.rstrip("/")
     ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
+    events: list[dict] = []
+    stop_events = asyncio.Event()
+    collector = asyncio.create_task(collect_events(ws_base, events, stop_events))
+    await asyncio.sleep(0.3)
+    try:
+        result = await run_call(args, base, ws_base)
+    finally:
+        await asyncio.sleep(1.0)  # late actions (sms_sent)
+        stop_events.set()
+        await collector
+    result["events"] = events
+    call_ids = [e["callId"] for e in events if e.get("type") == "call_started"]
+    result["events_summary"] = summarise_events(events, call_ids[-1]) if call_ids else {}
+    return result
+
+
+async def run_call(args: argparse.Namespace, base: str, ws_base: str) -> dict:
     audio = read_wav_as_mulaw(args.audio)
     timeline: list[dict] = []
     result: dict = {"audio": str(args.audio), "audio_seconds": round(len(audio) / 8000, 1)}
@@ -76,6 +130,14 @@ async def run(args: argparse.Namespace) -> dict:
     ) as control:
         status = json.loads(await control.recv())
         assert status == {"type": "protection_status", "available": True}, status
+
+        async def pinger() -> None:  # the backend closes an idle control channel after 45 s
+            with contextlib.suppress(websockets.ConnectionClosed):
+                while True:
+                    await asyncio.sleep(15)
+                    await control.send(json.dumps({"type": "ping"}))
+
+        ping_task = asyncio.create_task(pinger())
         async with httpx.AsyncClient() as http:
             response = await http.post(
                 f"{base}/dev/calls", json={"caller": args.caller, "lang": args.lang}
@@ -103,7 +165,9 @@ async def run(args: argparse.Namespace) -> dict:
                 )
             )
             t0 = time.monotonic()
-            incoming = json.loads(await control.recv())
+            incoming = {}
+            while incoming.get("type") != "incoming_call":
+                incoming = json.loads(await control.recv())
             url = f"{ws_base}/app/call/{incoming['callId']}?token={incoming['token']}"
             async with websockets.connect(url) as app:
                 await app.send(json.dumps({"type": "accept"}))
@@ -118,6 +182,11 @@ async def run(args: argparse.Namespace) -> dict:
                     async for message in app:
                         if isinstance(message, bytes):
                             counters["app_audio_frames"] += 1
+                            if args.echo_gain > 0 and not ended.is_set():
+                                pcm = np.frombuffer(message, dtype="<i2").astype(np.float32)
+                                leak = np.clip(pcm * args.echo_gain, -32768, 32767)
+                                with contextlib.suppress(websockets.ConnectionClosed):
+                                    await app.send(leak.astype("<i2").tobytes())
                             continue
                         event = json.loads(message)
                         event["t"] = round(time.monotonic() - t0, 1)
@@ -159,12 +228,51 @@ async def run(args: argparse.Namespace) -> dict:
                             await asyncio.sleep(delay)
                     await stream.send(json.dumps({"event": "stop", "streamSid": STREAM_SID}))
 
-                tasks = [asyncio.create_task(c()) for c in (app_events, caller_side, feed)]
+                async def senior_side() -> None:
+                    if args.senior_audio is None:
+                        return
+                    mulaw = read_wav_as_mulaw(args.senior_audio)
+                    pcm8k = mulaw_decode(mulaw).astype(np.float32) / 32768
+                    pcm = (resample(pcm8k, 8000, 16000) * 32767).astype("<i2").tobytes()
+                    await asyncio.sleep(args.senior_at)
+                    start = time.monotonic()
+                    for i in range(0, len(pcm), 640):
+                        if ended.is_set():
+                            return
+                        await app.send(pcm[i : i + 640])
+                        delay = start + (i // 640 + 1) * 0.02 - time.monotonic()
+                        if delay > 0:
+                            await asyncio.sleep(delay)
+
+                tasks = [
+                    asyncio.create_task(c()) for c in (app_events, caller_side, feed, senior_side)
+                ]
                 with contextlib.suppress(TimeoutError, websockets.ConnectionClosed):
                     await asyncio.wait_for(tasks[0], args.audio_timeout + len(audio) / 8000)
                 for task in tasks:
                     task.cancel()
                 result.update(counters)
+        # The trusted-person alert arrives on the control channel after the call ends.
+        alerts: list[dict] = []
+        with contextlib.suppress(TimeoutError):
+            async with asyncio.timeout(args.alert_wait):
+                while True:
+                    message = json.loads(await control.recv())
+                    if message.get("type") == "alert_trusted":
+                        message["t"] = round(time.monotonic() - t0, 1)
+                        alerts.append(message)
+                        print(json.dumps(message, ensure_ascii=False), flush=True)
+                        await control.send(
+                            json.dumps(
+                                {
+                                    "type": "alert_trusted_result",
+                                    "callId": message["callId"],
+                                    "sent": True,
+                                }
+                            )
+                        )
+        result["alerts_trusted"] = alerts
+        ping_task.cancel()
     result["timeline"] = timeline
     risks = [e for e in timeline if e["type"] == "risk"]
     first = lambda pred: next((e["t"] for e in timeline if pred(e)), None)  # noqa: E731
@@ -196,12 +304,19 @@ def main() -> None:
     )
     parser.add_argument("--audio-timeout", type=float, default=40.0)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--echo-gain", type=float, default=0.0)
+    parser.add_argument("--senior-audio", type=Path)
+    parser.add_argument("--senior-at", type=float, default=5.0)
+    parser.add_argument("--alert-wait", type=float, default=3.0)
     args = parser.parse_args()
     if not args.device_token:
         raise SystemExit("set APP_DEVICE_TOKEN or --device-token")
     result = asyncio.run(run(args))
     print(json.dumps(result["summary"], ensure_ascii=False))
-    print(json.dumps({k: v for k, v in result.items() if k not in ("timeline", "summary")}))
+    print(json.dumps(result.get("events_summary", {}), ensure_ascii=False))
+    print(f"alert_trusted received: {len(result.get('alerts_trusted', []))}")
+    skip = ("timeline", "summary", "events", "events_summary", "alerts_trusted")
+    print(json.dumps({k: v for k, v in result.items() if k not in skip}))
     if args.out:
         args.out.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n")
 

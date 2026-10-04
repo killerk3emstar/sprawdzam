@@ -41,7 +41,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _EMPTY = np.zeros(0, dtype=np.float32)
-SENIOR_HOLD_SECONDS = 4.0
+SENIOR_HOLD_SECONDS = 8.0  # = the longest caller segment
+# Senior context older than this is skipped (keeps the shared Whisper free for the caller).
+SENIOR_MAX_WAIT_SECONDS = 12.0
+SENIOR_STT_TIMEOUT = 3.0
 _POLL_SECONDS = 0.1
 
 
@@ -177,6 +180,10 @@ class CallSession:
         if self._pending["caller"]:
             return ("caller", *self._pending["caller"].popleft())
         senior = self._pending["senior"]
+        while senior and time.monotonic() - senior[0][0] > SENIOR_MAX_WAIT_SECONDS:
+            senior.popleft()
+            self.stats["dropped_segments"] += 1
+            log_event(logger, logging.INFO, "senior_segment_stale", call_id=self.call_sid)
         if senior:
             enqueued_at = senior[0][0]
             caller_speaking = self.segmenter.in_segment and not self._closing
@@ -217,9 +224,12 @@ class CallSession:
         self.stats["segments" if speaker == "caller" else "senior_segments"] += 1
         started = time.perf_counter()
         wait_ms = None if enqueued_at is None else round((time.monotonic() - enqueued_at) * 1000)
+        timeout = (
+            self.stt_timeout if speaker == "caller" else min(self.stt_timeout, SENIOR_STT_TIMEOUT)
+        )
         try:
             text = await asyncio.wait_for(
-                self.stt.transcribe(segment, STT_RATE, self.lang), self.stt_timeout
+                self.stt.transcribe(segment, STT_RATE, self.lang), timeout
             )
         except Exception as exc:  # noqa: BLE001 - STT down: fail open, call continues
             self.stats["stt_errors"] += 1
@@ -250,12 +260,12 @@ class CallSession:
         if not isinstance(text, str) or not text.strip():
             return
         if speaker == "senior":
-            if self.echo_guard.is_echo(text):
+            if self.echo_guard.is_echo(text, captured_at=enqueued_at):
                 self.stats["echo_dropped"] += 1
                 log_event(logger, logging.INFO, "echo_dropped", call_id=self.call_sid)
                 return
         else:
-            self.echo_guard.add_caller(text)
+            self.echo_guard.add_caller(text, at=enqueued_at)
         self.transcript.add(speaker, text)
         if self.events is not None:
             self.events.transcript(self.call_sid, speaker, " ".join(text.split()))

@@ -36,6 +36,7 @@ from app.calls.sender import SafeSender
 from app.calls.voice_prompts import PromptLibrary
 from app.config import Lang
 from app.logging_setup import log_event
+from app.prompts import VOICE_PROMPTS
 from app.relay import protocol
 from app.relay.protocol import EndReason
 from app.relay.trusted_alert import compose_alert_text
@@ -91,6 +92,8 @@ class CallBridge:
         self.last_assessment: RiskAssessment | None = None
         # Senior's microphone audio for speech-to-text (set by the stream handler).
         self.senior_audio_sink: Callable[[bytes], None] | None = None
+        # Text of every voice prompt played to the senior (echo guard reference).
+        self.played_text_sink: Callable[[str], None] | None = None
 
         self.state = CallState.RINGING
         self.ended = asyncio.Event()
@@ -304,6 +307,9 @@ class CallBridge:
                 self._to_app.get_nowait()
             app = self.app
             for name in names:
+                text = VOICE_PROMPTS.get(name, {}).get(self.lang)
+                if text and self.played_text_sink is not None:
+                    self.played_text_sink(text)
                 await self._paced(self._app_prompt_frames(name), app.send_bytes)
 
     async def play_to_caller(self, name: str) -> None:
