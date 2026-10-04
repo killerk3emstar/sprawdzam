@@ -3,6 +3,9 @@
 * `GET /dev/caller`: the "scammer" side. Talks to the real provider media-stream WebSocket
   using the Twilio message format (browser mic -> 8 kHz mu-law -> base64 `media`).
 * `GET /dev/senior`: the senior app, speaking app protocol v0 (docs/APP_PROTOCOL.md).
+* `GET /dev/jury`: projector console for the jury (live transcript, risk chart, actions) and the
+  operator alert table; fed by the `/dev/events` WebSocket, or by a replay with `?mock=1`.
+* `GET /dev/`: index of the dev pages.
 * `POST /dev/calls`: admits a call exactly like the voice webhook (rate limit, app online,
   concurrency slot, one-time stream token) but without a provider signature.
 * `GET /dev/samples`, `GET /dev/samples/{name}.ulaw`: sample caller clips rendered by
@@ -53,6 +56,16 @@ async def caller_page() -> FileResponse:
 @router.get("/senior", include_in_schema=False)
 async def senior_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "senior.html", headers=NO_STORE)
+
+
+@router.get("/jury", include_in_schema=False)
+async def jury_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "jury.html", headers=NO_STORE)
+
+
+@router.get("/", include_in_schema=False)
+async def index_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html", headers=NO_STORE)
 
 
 @router.get("/samples")

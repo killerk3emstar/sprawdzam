@@ -1,49 +1,418 @@
 <!doctype html>
-<html lang="en">
+<html lang="pl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dev caller</title>
-<link rel="stylesheet" href="/dev/static/style.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d1117">
+<title>Operator network simulator</title>
+<style>
+:root { --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif; --bg: #0d1117; --panel: #161b22; --panel2: #1f2630; --line: #2d3540; --fg: #eef2f7;
+        --muted: #9aa6b5; --accent: #4c8dff; --ok: #2fbf71; --okd: #1f9a59; --bad: #ef4444;
+        --badd: #c62828; --warn: #f5a524; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body { font: 17px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+       min-height: 100vh; -webkit-text-size-adjust: 100%; }
+main { max-width: 520px; margin: 0 auto;
+       padding: max(14px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--ok); flex: none;
+              box-shadow: 0 0 0 4px rgba(47,191,113,.18); }
+.brand h1 { font-size: 1.12rem; margin: 0; letter-spacing: .01em; }
+.brand small { display: block; color: var(--muted); font-size: .78rem; font-weight: 500; }
+.lang { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; flex: none; }
+.lang button { background: none; border: 0; color: var(--muted); font: 600 .85rem/1 var(--font);
+               padding: 9px 12px; min-width: 44px; min-height: 36px; }
+.lang button.on { background: var(--panel2); color: var(--fg); }
+.section { margin-top: 18px; }
+.label { color: var(--muted); font-size: .78rem; font-weight: 600; text-transform: uppercase;
+         letter-spacing: .07em; margin: 0 0 8px 2px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--panel); border: 1px solid var(--line);
+       border-radius: 14px; padding: 4px; gap: 4px; }
+.seg button { border: 0; border-radius: 10px; background: none; color: var(--muted);
+              font: 600 1rem/1.2 var(--font); padding: 12px 8px; min-height: 48px; }
+.seg button.on { background: var(--panel2); color: var(--fg); box-shadow: 0 1px 0 rgba(255,255,255,.06) inset; }
+.scripts { display: grid; gap: 8px; }
+.script { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px;
+          background: var(--panel); border: 2px solid var(--line); border-radius: 14px;
+          padding: 10px 14px; min-height: 58px; text-align: left; color: var(--fg); font: inherit; width: 100%; }
+.script.on { border-color: var(--accent); background: #15233d; }
+.script .tag { font: 700 .72rem/1 var(--font); padding: 6px 7px; border-radius: 6px; background: var(--panel2);
+               color: var(--muted); letter-spacing: .04em; }
+.script .title { font-weight: 650; }
+.script .sub { display: block; color: var(--muted); font-size: .82rem; font-weight: 500; }
+.script .kind { font: 700 .72rem/1 var(--font); padding: 6px 8px; border-radius: 999px; white-space: nowrap; }
+.kind.scam { background: rgba(239,68,68,.16); color: #ff8a8a; }
+.kind.normal { background: rgba(47,191,113,.16); color: #6ee7a8; }
+.kind.other { background: var(--panel2); color: var(--muted); }
+.empty { color: var(--warn); font-size: .9rem; }
+.toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+          background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
+          min-height: 56px; margin-top: 10px; }
+.toggle > span:first-child { font-size: .95rem; }
+.toggle span small { display: block; color: var(--muted); font-size: .8rem; }
+.switch { position: relative; width: 52px; height: 32px; flex: none; }
+.switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; z-index: 1; }
+.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .15s; }
+.switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px;
+                   border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch input:checked + i { background: var(--ok); }
+.switch input:checked + i::after { transform: translateX(20px); }
+.callzone { position: sticky; bottom: 0; z-index: 5; margin: 18px -16px 0; padding: 14px 16px max(14px, env(safe-area-inset-bottom));
+            display: grid; justify-items: center; gap: 10px;
+            background: linear-gradient(to bottom, rgba(13,17,23,0), var(--bg) 18px); }
+.statuszone { display: grid; gap: 10px; margin-top: 6px; }
+.labelrow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.labelrow .label { margin: 0 0 0 2px; }
+.mini { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.mini button { background: none; border: 0; color: var(--muted); font: 700 .78rem/1 var(--font); padding: 8px 12px; min-height: 34px; }
+.mini button.on { background: var(--panel2); color: var(--fg); }
+.more { background: none; border: 0; color: var(--accent); font: 600 .9rem/1 var(--font); padding: 10px 2px; min-height: 40px; }
+.bigbtn { width: 100%; min-height: 84px; border: 0; border-radius: 22px; font: 750 1.75rem/1 var(--font);
+          color: #fff; display: flex; align-items: center; justify-content: center; gap: 14px;
+          letter-spacing: .01em; touch-action: manipulation; }
+.bigbtn svg { width: 34px; height: 34px; }
+.bigbtn.call { background: var(--okd); box-shadow: 0 10px 30px rgba(47,191,113,.28); }
+.bigbtn.call:active { background: #17804a; }
+.bigbtn.hang { background: var(--badd); box-shadow: 0 10px 30px rgba(239,68,68,.28); }
+.bigbtn.hang:active { background: #a51f1f; }
+.bigbtn:disabled { opacity: .5; }
+.status { width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+          padding: 14px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
+.status .led { width: 14px; height: 14px; border-radius: 50%; background: var(--muted); }
+.status .led.ringing { background: var(--warn); animation: pulse 1s infinite; }
+.status .led.live { background: var(--ok); animation: pulse 1.6s infinite; }
+.status .led.ended { background: var(--bad); }
+.status b { font-size: 1.1rem; display: block; }
+.status small { color: var(--muted); font-size: .85rem; display: block; }
+.status .timer { font: 650 1.3rem/1 ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); }
+@keyframes pulse { 50% { opacity: .35; } }
+.banner { width: 100%; border-radius: 14px; padding: 14px 16px; font-weight: 650;
+          background: rgba(239,68,68,.14); border: 1px solid rgba(239,68,68,.5); color: #ffb4b4; }
+.banner.info { background: rgba(76,141,255,.12); border-color: rgba(76,141,255,.45); color: #bcd3ff; }
+details { margin-top: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+summary { padding: 14px 16px; color: var(--muted); font-weight: 600; cursor: pointer; min-height: 48px; }
+.adv { padding: 0 16px 16px; display: grid; gap: 12px; }
+.adv label { color: var(--muted); font-size: .85rem; display: grid; gap: 6px; }
+.adv input, .adv select { font: inherit; font-size: 16px; color: var(--fg); background: var(--bg);
+       border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; }
+.adv .check { display: flex; align-items: center; gap: 10px; color: var(--fg); }
+.adv .check input { width: 22px; height: 22px; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.keypad button { min-height: 52px; font: 600 1.3rem/1 var(--font); background: var(--panel2); color: var(--fg);
+                 border: 1px solid var(--line); border-radius: 12px; }
+.keypad button:active { background: var(--line); }
+pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+      font-size: 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; color: var(--muted); }
+.hint { color: var(--muted); font-size: .85rem; margin: 0; }
+.hint a { color: var(--accent); }
+[hidden] { display: none !important; }
+@media (min-width: 900px) { main { padding-top: 40px; } }
+</style>
 </head>
 <body>
 <main>
-  <h1>Dev caller <small>plays the caller over the real media-stream path (Twilio format)</small></h1>
-  <p class="hint">Open <a href="/dev/senior" target="_blank">/dev/senior</a> first and turn
-    protection on. With the microphone, use headphones: two tabs on one computer feed back.</p>
-  <div class="card">
-    <label>Caller number <input id="caller" value="+48500000001" autocomplete="off"></label>
-    <label>Language
-      <select id="lang"><option value="">server default / app setting</option><option>pl</option><option>en</option></select>
-    </label>
-    <label>Audio source
-      <select id="source"><option value="">microphone</option></select>
-    </label>
-    <label class="check"><input id="mute" type="checkbox"> mute playback in this tab</label>
-    <div class="row">
-      <button id="call" class="primary">Call</button>
-      <button id="hangup" class="danger" disabled>Hang up</button>
+  <header>
+    <div class="brand">
+      <span class="dot" aria-hidden="true"></span>
+      <h1><span data-i18n="title"></span><small data-i18n="subtitle"></small></h1>
     </div>
-    <p>Status: <span id="status" class="status">idle</span></p>
-    <p class="hint">Keypad (caller DTMF, e.g. the family password):</p>
-    <div class="keypad" id="keypad"></div>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="pl">PL</button><button type="button" data-lang="en">EN</button>
+    </div>
+  </header>
+
+  <div class="section" id="setup">
+    <p class="label" data-i18n="source"></p>
+    <div class="seg" role="group">
+      <button type="button" id="srcScript" class="on" data-i18n="srcScript"></button>
+      <button type="button" id="srcMic" data-i18n="srcMic"></button>
+    </div>
+
+    <div class="section" id="scriptBox">
+      <div class="labelrow">
+        <p class="label" data-i18n="script"></p>
+        <div class="mini" role="group" aria-label="Script language">
+          <button type="button" data-slang="pl">PL</button><button type="button" data-slang="en">EN</button>
+        </div>
+      </div>
+      <div class="scripts" id="scripts"></div>
+      <button type="button" class="more" id="more"></button>
+      <p class="empty" id="noSamples" hidden data-i18n="noSamples"></p>
+      <label class="toggle">
+        <span><span data-i18n="monitor"></span><small data-i18n="monitorHint"></small></span>
+        <span class="switch"><input type="checkbox" id="monitor"><i></i></span>
+      </label>
+    </div>
+    <p class="hint section" id="micHint" hidden data-i18n="micHint"></p>
   </div>
-  <pre id="log"></pre>
+
+  <div class="callzone">
+    <button type="button" id="call" class="bigbtn call">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.570a1 1 0 0 1-.25 1z"/></svg>
+      <span data-i18n="call"></span>
+    </button>
+    <button type="button" id="hangup" class="bigbtn hang" hidden>
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.870 1.12-2.66 1.85a1 1 0 0 1-1.41-.02L.29 13.08a1 1 0 0 1 0-1.41C3.34 8.77 7.46 7 12 7s8.66 1.77 11.71 4.670a1 1 0 0 1 0 1.41l-2.48 2.48a1 1 0 0 1-1.41.02 11.3 11.3 0 0 0-2.67-1.85 1 1 0 0 1-.56-.9v-3.1A15 15 0 0 0 12 9z"/></svg>
+      <span data-i18n="hangup"></span>
+    </button>
+  </div>
+  <div class="statuszone">
+    <div class="status" aria-live="polite">
+      <span class="led" id="led"></span>
+      <span><b id="statusText"></b><small id="statusSub"></small></span>
+      <span class="timer" id="timer"></span>
+    </div>
+    <div class="banner" id="banner" hidden></div>
+  </div>
+
+  <details>
+    <summary data-i18n="advanced"></summary>
+    <div class="adv">
+      <label><span data-i18n="callerNo"></span><input id="caller" value="+48500000001" autocomplete="off" inputmode="tel"></label>
+      <label><span data-i18n="callLang"></span>
+        <select id="lang"><option value="" data-i18n="langAuto"></option><option value="pl">pl</option><option value="en">en</option></select>
+      </label>
+      <label class="check"><input id="mute" type="checkbox"><span data-i18n="mute"></span></label>
+      <p class="hint" data-i18n="keypadHint"></p>
+      <div class="keypad" id="keypad"></div>
+      <p class="hint"><span data-i18n="otherPages"></span> <a href="/dev/senior" target="_blank">/dev/senior</a> ·
+        <a href="/dev/jury" target="_blank">/dev/jury</a> · <a href="/dev/" target="_blank">/dev/</a></p>
+      <pre id="log"></pre>
+    </div>
+  </details>
 </main>
 <script type="module">
-import { base64ToBytes, bytesToBase64, makeLogger, mulawDecode, mulawEncode, startAudio, wsBase }
-  from "/dev/static/audio.js";
+import { base64ToBytes, bytesToBase64, makeLogger, mulawDecode, mulawEncode, setAudioSession,
+         startAudio, unlockAudio, wsBase } from "/dev/static/audio.js";
 
 const $ = (id) => document.getElementById(id);
 const log = makeLogger($("log"));
+
+// ---- i18n -------------------------------------------------------------------------------
+const T = {
+  pl: {
+    title: "Symulator sieci operatora", subtitle: "Dzwonisz z nieznanego numeru do chronionego seniora",
+    source: "Źródło dźwięku", srcScript: "Nagrany skrypt", srcMic: "Mikrofon na żywo", script: "Skrypt rozmowy",
+    noSamples: "Brak nagrań na serwerze: uruchom server/scripts/make_samples.sh",
+    monitor: "Odsłuch skryptu na tym telefonie", monitorHint: "Domyślnie wyłączony (bez echa przy drugim telefonie)",
+    micHint: "Mów do mikrofonu. Trzymaj ten telefon z dala od telefonu seniora, żeby nie było echa.",
+    call: "Zadzwoń", hangup: "Rozłącz", advanced: "Zaawansowane",
+    callerNo: "Numer dzwoniącego", callLang: "Język rozmowy", langAuto: "automatycznie (ze skryptu / z interfejsu)",
+    mute: "Wycisz głos seniora na tym telefonie", keypadHint: "Klawiatura (DTMF dzwoniącego, np. hasło rodzinne):",
+    otherPages: "Inne strony:",
+    idle: "Gotowy", idleSub: "Wybierz skrypt i naciśnij Zadzwoń", connecting: "Łączenie…",
+    connectingSub: "Sieć operatora zestawia połączenie", ringing: "Dzwoni…",
+    ringingSub: "Czekamy, aż senior odbierze", live: "Rozmowa trwa",
+    liveScript: "Odtwarzamy skrypt: {name}", liveMic: "Mówisz przez mikrofon", scriptDone: "Skrypt zakończony, linia otwarta",
+    ended: "Rozmowa zakończona", endedYou: "Rozłączyłeś się", endedNet: "Połączenie przerwane po stronie sieci", endedPeer: "Rozmówca się rozłączył",
+    cutBanner: "Rozmowa przerwana przez ochronę Sprawdzam. Senior jest bezpieczny.",
+    rejected: "Połączenie odrzucone", error: "Błąd", micError: "Brak dostępu do mikrofonu (wymaga HTTPS i zgody)",
+    trusted: "Numer z kontaktów: rozmowa nie jest analizowana",
+    notice: "Prawdziwy dzwoniący słyszy teraz: „{text}”",
+    sPolice: "Na policjanta", sPoliceSub: "Fałszywa policjantka, gotówka, tajemnica",
+    sGrand: "Na wnuczka", sGrandSub: "Wypadek, kaucja w gotówce, „nie mów nikomu”",
+    sNormal: "Zwykła rozmowa", sNormalSub: "Wnuczka dziękuje za prezent, oddaje pożyczkę",
+    sBank: "Na pracownika banku", sBankSub: "Bezpieczne konto, kod z SMS-a",
+    sFamily: "Rozmowa rodzinna", sFamilySub: "Krótka zwykła rozmowa",
+    scam: "oszustwo", normal: "zwykła", other: "inne", more: "Więcej skryptów", less: "Mniej skryptów",
+  },
+  en: {
+    title: "Operator network simulator", subtitle: "You call a protected senior from an unknown number",
+    source: "Audio source", srcScript: "Recorded script", srcMic: "Live microphone", script: "Call script",
+    noSamples: "No recordings on the server: run server/scripts/make_samples.sh",
+    monitor: "Play the script on this phone", monitorHint: "Off by default (no echo with the other phone nearby)",
+    micHint: "Speak into the microphone. Keep this phone away from the senior's phone to avoid echo.",
+    call: "Call", hangup: "Hang up", advanced: "Advanced",
+    callerNo: "Caller number", callLang: "Call language", langAuto: "automatic (from the script / the UI)",
+    mute: "Mute the senior's voice on this phone", keypadHint: "Keypad (caller DTMF, e.g. the family password):",
+    otherPages: "Other pages:",
+    idle: "Ready", idleSub: "Pick a script and press Call", connecting: "Connecting…",
+    connectingSub: "The operator network is setting up the call", ringing: "Ringing…",
+    ringingSub: "Waiting for the senior to answer", live: "In call",
+    liveScript: "Playing the script: {name}", liveMic: "You are speaking through the microphone",
+    scriptDone: "Script finished, line still open",
+    ended: "Call ended", endedYou: "You hung up", endedNet: "Disconnected by the network", endedPeer: "The other side hung up",
+    cutBanner: "Call cut off by Sprawdzam protection. The senior is safe.",
+    rejected: "Call rejected", error: "Error", micError: "No microphone access (needs HTTPS and permission)",
+    trusted: "Number is a contact: the call is not analysed",
+    notice: "A real caller now hears: “{text}”",
+    sPolice: "Fake police officer", sPoliceSub: "Fake detective, cash handover, secrecy",
+    sGrand: "Grandchild in trouble", sGrandSub: "Accident, bail in cash, “don't tell anyone”",
+    sNormal: "Normal call", sNormalSub: "Granddaughter thanks for a gift, pays back a loan",
+    sBank: "Fake bank employee", sBankSub: "Safe account, SMS code",
+    sFamily: "Family call", sFamilySub: "Short normal conversation",
+    scam: "scam", normal: "normal", other: "other", more: "More scripts", less: "Fewer scripts",
+  },
+};
+const SCRIPT_META = {
+  scam_police: { key: "sPolice", kind: "scam", order: 1 },
+  scam_grandchild: { key: "sGrand", kind: "scam", order: 2 },
+  normal_grandchild: { key: "sNormal", kind: "normal", order: 3 },
+  scam_bank: { key: "sBank", kind: "scam", order: 4 },
+  normal_family: { key: "sFamily", kind: "normal", order: 5 },
+};
+let ui = "pl";
+try { ui = localStorage.getItem("callerLang") || "pl"; } catch {}
+if (!T[ui]) ui = "pl";
+const t = (key, vars = {}) => (T[ui][key] || key).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
+
+function applyLang() {
+  document.documentElement.lang = ui;
+  document.title = t("title");
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-lang]").forEach((b) => b.classList.toggle("on", b.dataset.lang === ui));
+  renderScripts();
+  renderStatus();
+}
+document.querySelectorAll("[data-lang]").forEach((b) => b.onclick = () => {
+  ui = b.dataset.lang;
+  try { localStorage.setItem("callerLang", ui); } catch {}
+  // The script language follows the UI language (it can still be switched separately).
+  const sl = document.querySelector(`[data-slang="${ui}"]`);
+  if (sl) sl.click();
+  applyLang();
+});
+
+// ---- scripts / source -------------------------------------------------------------------
+let samples = [];
+let selected = null;
+let useMic = false;
+let scriptLang = ui;
+let showMore = false;
+
+function scriptMeta(name) {
+  const meta = SCRIPT_META[name.slice(3)];
+  return meta || { key: null, kind: "other", order: 99 };
+}
+
+function renderScripts() {
+  const box = $("scripts");
+  box.textContent = "";
+  document.querySelectorAll("[data-slang]").forEach((b) => b.classList.toggle("on", b.dataset.slang === scriptLang));
+  const inLang = samples.filter((s) => s.lang === scriptLang);
+  const extras = inLang.filter((s) => scriptMeta(s.name).order > 3);
+  $("more").hidden = !extras.length;
+  $("more").textContent = showMore ? t("less") : `${t("more")} (${extras.length})`;
+  for (const s of inLang) {
+    const meta = scriptMeta(s.name);
+    if (meta.order > 3 && !showMore && s.name !== selected) continue;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "script" + (s.name === selected ? " on" : "");
+    b.setAttribute("aria-pressed", String(s.name === selected));
+    const text = document.createElement("span");
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = meta.key ? t(meta.key) : s.name;
+    const sub = document.createElement("span");
+    sub.className = "sub";
+    sub.textContent = `${meta.key ? t(meta.key + "Sub") + " · " : ""}${Math.round(s.seconds)} s`;
+    text.append(title, sub);
+    const kind = document.createElement("span");
+    kind.className = `kind ${meta.kind}`;
+    kind.textContent = t(meta.kind);
+    b.append(text, kind);
+    b.onclick = () => {
+      selected = s.name;
+      try { localStorage.setItem("callerScript", selected); } catch {}
+      renderScripts();
+    };
+    box.append(b);
+  }
+  $("noSamples").hidden = samples.length > 0;
+}
+
+function setSource(mic) {
+  useMic = mic;
+  $("srcMic").classList.toggle("on", mic);
+  $("srcScript").classList.toggle("on", !mic);
+  $("scriptBox").hidden = mic;
+  $("micHint").hidden = !mic;
+}
+$("srcScript").onclick = () => setSource(false);
+$("more").onclick = () => { showMore = !showMore; renderScripts(); };
+document.querySelectorAll("[data-slang]").forEach((b) => b.onclick = () => {
+  scriptLang = b.dataset.slang;
+  const main = `${scriptLang}_scam_police`;
+  if (!selected || !selected.startsWith(scriptLang + "_")) {
+    selected = samples.some((s) => s.name === main) ? main
+      : (samples.find((s) => s.lang === scriptLang) || {}).name || null;
+  }
+  renderScripts();
+});
+$("srcMic").onclick = () => setSource(true);
+
+async function loadSamples() {
+  try {
+    const res = await fetch("/dev/samples", { cache: "no-store" });
+    const data = await res.json();
+    // Demo scripts first (police, grandchild, normal), in the UI language, then the other one.
+    samples = data.samples.slice().sort((a, b) =>
+      scriptMeta(a.name).order - scriptMeta(b.name).order || a.name.localeCompare(b.name));
+    let saved = null;
+    try { saved = localStorage.getItem("callerScript"); } catch {}
+    const names = samples.map((s) => s.name);
+    selected = names.includes(saved) ? saved
+      : names.includes(`${ui}_scam_police`) ? `${ui}_scam_police` : names[0] || null;
+    if (selected) scriptLang = selected.slice(0, 2);
+    renderScripts();
+  } catch (err) {
+    log(`could not list samples: ${err.message}`);
+    $("noSamples").hidden = false;
+  }
+}
+
+// ---- status -----------------------------------------------------------------------------
+let state = "idle";            // idle | connecting | ringing | live | ended
+let statusSub = null;          // [key, vars] or a plain string
+let callStart = 0, timerHandle = null, endedByUser = false;
+
+function setState(next, sub = null) {
+  state = next;
+  statusSub = sub;
+  renderStatus();
+  log(`${next}${sub ? ": " + (Array.isArray(sub) ? t(sub[0], sub[1]) : sub) : ""}`);
+}
+
+function renderStatus() {
+  $("statusText").textContent = t(state);
+  const defaultSub = { idle: "idleSub", connecting: "connectingSub", ringing: "ringingSub" }[state];
+  const sub = statusSub || (defaultSub ? [defaultSub] : "");
+  $("statusSub").textContent = Array.isArray(sub) ? t(sub[0], sub[1]) : sub;
+  $("led").className = "led " + ({ ringing: "ringing", connecting: "ringing", live: "live", ended: "ended" }[state] || "");
+  const inCall = state === "connecting" || state === "ringing" || state === "live";
+  $("call").hidden = inCall;
+  $("hangup").hidden = !inCall;
+  $("setup").hidden = inCall;
+}
+
+function startTimer() {
+  callStart = performance.now();
+  clearInterval(timerHandle);
+  timerHandle = setInterval(() => {
+    const s = Math.floor((performance.now() - callStart) / 1000);
+    $("timer").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }, 250);
+}
+
+function showBanner(text, info = false) {
+  $("banner").textContent = text;
+  $("banner").className = info ? "banner info" : "banner";
+  $("banner").hidden = !text;
+}
+
+// ---- call (Twilio Media Streams format) -------------------------------------------------
 const ACCOUNT = "AC" + "0".repeat(32);
 const SILENCE = new Uint8Array(160).fill(0xff);
 let ws = null, audio = null, streamSid = null, callId = null, seq = 0, chunk = 0, t0 = 0;
-let sample = null, samplePos = 0, sampleTimer = null, answered = false;
+let sample = null, samplePos = 0, sampleTimer = null, answered = false, wakeLock = null;
+let prompts = 0;  // backend prompts (warning, password question) played to the caller
 
 const hex = (n) => [...crypto.getRandomValues(new Uint8Array(n))]
   .map((b) => b.toString(16).padStart(2, "0")).join("");
-const setStatus = (text) => { $("status").textContent = text; log(text); };
 const send = (obj) => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ sequenceNumber: String(++seq), ...obj }));
@@ -58,17 +427,18 @@ function sendMulaw(bytes) {
     payload: bytesToBase64(bytes) } });
 }
 
-// Microphone mode: 20 ms frames from the AudioWorklet.
+// Microphone mode: 20 ms frames at 8 kHz (resampled from the device rate in the worklet).
 const sendFrame = (samples) => sendMulaw(mulawEncode(samples));
 
-// Sample mode: silence until the senior answers (first `clear`), then the clip in real
-// time, then silence again so the call stays open until someone hangs up.
+// Script mode: silence until the senior answers (first `clear`), then the clip in real
+// time, then silence so the call stays open until someone hangs up.
 function nextSampleFrame() {
   if (!answered || !sample || samplePos >= sample.length) return SILENCE;
   const frame = new Uint8Array(160).fill(0xff);
   frame.set(sample.subarray(samplePos, samplePos + 160));
   samplePos += 160;
-  if (samplePos >= sample.length) log("sample finished (silence from now on)");
+  if (audio && $("monitor").checked) audio.monitor(mulawDecode(frame));
+  if (samplePos >= sample.length) setState("live", ["scriptDone"]);
   return frame;
 }
 
@@ -77,6 +447,8 @@ function startSampleClock() {
   let sent = 0;
   sampleTimer = setInterval(() => {
     const due = Math.floor((performance.now() - start) / 20);
+    // After a stall (e.g. the screen locked) skip ahead instead of sending a burst.
+    if (due - sent > 50) sent = due - 1;
     while (sent < due) { sendMulaw(nextSampleFrame()); sent += 1; }
   }, 20);
 }
@@ -88,8 +460,11 @@ function onServerMessage(msg) {
     if (audio) audio.clear();
     if (!answered) {
       answered = true;
-      log(sample ? "answered: ringback stopped, playing the sample" : "answered: ringback stopped");
+      startTimer();
+      const meta = sample ? scriptMeta(selected) : null;
+      setState("live", sample ? ["liveScript", { name: meta.key ? t(meta.key) : selected }] : ["liveMic"]);
     } else {
+      prompts += 1;
       log("clear (a backend prompt starts)");
     }
   } else if (msg.event === "mark") {
@@ -100,39 +475,36 @@ function onServerMessage(msg) {
 async function cleanup() {
   clearInterval(sampleTimer);
   sampleTimer = null;
+  clearInterval(timerHandle);
+  if (wakeLock) { try { await wakeLock.release(); } catch {} wakeLock = null; }
   if (audio) { const a = audio; audio = null; await a.stop(); }
   ws = null;
-  $("call").disabled = false;
-  $("hangup").disabled = true;
-}
-
-async function loadSamples() {
-  try {
-    const res = await fetch("/dev/samples");
-    const { samples } = await res.json();
-    for (const s of samples) {
-      const option = document.createElement("option");
-      option.value = s.name;
-      option.textContent = `sample: ${s.name} (${s.seconds} s)`;
-      $("source").append(option);
-    }
-    if (!samples.length) log("no samples yet: run server/scripts/make_samples.sh");
-  } catch (err) {
-    log(`could not list samples: ${err.message}`);
-  }
 }
 
 $("call").onclick = async () => {
-  $("call").disabled = true;
+  // iOS: the AudioContext must be created and resumed synchronously in the tap handler.
+  // Script mode: "playback" also plays with the ringer switch on silent (iOS 17+). Microphone
+  // mode keeps Safari's default routing for calls with getUserMedia.
+  setAudioSession(useMic ? "auto" : "playback");
+  let ctx = null;
+  try { ctx = unlockAudio(); } catch (err) { log(`audio unlock failed: ${err.message}`); }
+  showBanner("");
+  $("timer").textContent = "";
+  endedByUser = false;
+  answered = false;
+  prompts = 0;
+  setState("connecting");
+  try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch {}
   try {
-    const source = $("source").value;
-    sample = null; samplePos = 0; answered = false;
+    const source = useMic ? null : selected;
+    if (!useMic && !source) throw new Error(t("noSamples"));
+    sample = null; samplePos = 0;
     if (source) {
-      const res = await fetch(`/dev/samples/${encodeURIComponent(source)}.ulaw`);
+      const res = await fetch(`/dev/samples/${encodeURIComponent(source)}.ulaw`, { cache: "no-store" });
       if (!res.ok) throw new Error(`sample ${source}: HTTP ${res.status}`);
       sample = new Uint8Array(await res.arrayBuffer());
     }
-    const lang = $("lang").value || (source ? source.slice(0, 2) : null);
+    const lang = $("lang").value || (source ? source.slice(0, 2) : ui);
     const res = await fetch("/dev/calls", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -140,16 +512,26 @@ $("call").onclick = async () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      setStatus(`rejected (${res.status} ${data.reason || data.error || ""}): "${data.message || ""}"`);
-      $("call").disabled = false;
+      setState("ended", `${t("rejected")} (${res.status} ${data.reason || data.error || ""})`);
+      if (data.message) showBanner(data.message, true);
+      if (ctx) ctx.close().catch(() => {});
+      await cleanup();
       return;
     }
     callId = data.callId;
     streamSid = "MZ" + hex(16);
     seq = 0; chunk = 0;
-    log(data.trusted ? `call ${callId} admitted (whitelisted contact: no notice, no analysis)`
-                     : `call ${callId} admitted; a real caller now hears: "${data.notice}"`);
-    audio = await startAudio({ targetRate: 8000, frameSamples: 160, onFrame: sendFrame, mic: !sample });
+    log(`call ${callId} admitted (${data.lang})`);
+    if (data.trusted) showBanner(t("trusted"), true);
+    else log(t("notice", { text: data.notice }));
+    try {
+      audio = await startAudio({ targetRate: 8000, frameSamples: 160, onFrame: sendFrame,
+                                 mic: !sample, ctx, monitor: !!sample });
+      log(`audio context ${audio.sampleRate} Hz`);
+    } catch (err) {
+      if (!sample) throw new Error(`${t("micError")}: ${err.message}`);
+      log(`audio output unavailable: ${err.message}`);
+    }
     ws = new WebSocket(wsBase() + data.streamPath);
     ws.onopen = () => {
       send({ event: "connected", protocol: "Call", version: "1.0.0" });
@@ -159,29 +541,43 @@ $("call").onclick = async () => {
         mediaFormat: { encoding: "audio/x-mulaw", sampleRate: 8000, channels: 1 } } });
       t0 = performance.now();
       if (sample) startSampleClock();
-      setStatus(`ringing (${data.lang}, waiting for the senior to accept)`);
-      $("hangup").disabled = false;
+      setState("ringing");
     };
     ws.onmessage = (event) => onServerMessage(JSON.parse(event.data));
-    ws.onclose = (event) => { setStatus(`call ended by the backend (code ${event.code})`); cleanup(); };
+    ws.onerror = () => log("websocket error");
+    ws.onclose = (event) => {
+      const byNetwork = !endedByUser;
+      // The backend closes the stream when protection hangs up on a scam (after its warning
+      // prompts) or when the senior hangs up (usually without any prompt).
+      const cut = byNetwork && answered && prompts > 0;
+      setState("ended", !byNetwork ? ["endedYou"] : cut ? `${t("endedNet")} (${event.code})` : ["endedPeer"]);
+      if (cut) showBanner(t("cutBanner"));
+      cleanup();
+    };
   } catch (err) {
-    setStatus(`error: ${err.message}`);
+    setState("ended", `${t("error")}: ${err.message}`);
+    if (ctx && !audio) ctx.close().catch(() => {});
     cleanup();
   }
 };
 
 $("hangup").onclick = () => {
+  endedByUser = true;
   send({ event: "stop", streamSid, stop: { accountSid: ACCOUNT, callSid: callId } });
   if (ws) ws.close();
+  else { setState("ended", ["endedYou"]); cleanup(); }
 };
 
 for (const digit of "123456789*0#") {
   const button = document.createElement("button");
+  button.type = "button";
   button.textContent = digit;
   button.onclick = () => send({ event: "dtmf", streamSid, dtmf: { track: "inbound_track", digit } });
   $("keypad").append(button);
 }
 
+setSource(false);
+applyLang();
 loadSamples();
 </script>
 </body>
