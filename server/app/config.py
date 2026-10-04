@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     STT_MAX_SEGMENT_SECONDS: float = Field(default=8.0, ge=1.0, le=25.0)
     STT_PAUSE_SECONDS: float = Field(default=0.2, ge=0.1, le=2.0)
     STT_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0, le=60)
+    # The senior's microphone (from the app) is transcribed too, as context for the model.
+    ANALYSE_SENIOR: bool = True
+    STT_SENIOR_MIN_SEGMENT_SECONDS: float = Field(default=1.5, ge=0.5, le=10.0)
 
     # Risk thresholds (0-100); warn and hang-up each need two readings in a row
     RISK_WARN: int = Field(default=50, ge=0, le=100)
@@ -79,6 +82,10 @@ class Settings(BaseSettings):
     OUTBOUND_ALLOWLIST: str = ""
     # Trusted person alerted on high risk (E.164; must also be on OUTBOUND_ALLOWLIST).
     TRUSTED_PERSON_NUMBER: str = ""
+    # Fail-open route: the senior's real phone number (E.164, must be on OUTBOUND_ALLOWLIST).
+    # When protection is unavailable the provider connects the caller straight to it
+    # (Twilio <Dial>) instead of ending the call; only when TELEPHONY_DRY_RUN is false.
+    SENIOR_NUMBER: str = ""
     MAX_OUTBOUND_CALLS_PER_DAY: int = Field(default=10, ge=0, le=1000)
     MAX_SMS_PER_DAY: int = Field(default=20, ge=0, le=1000)
     MAX_CONCURRENT_CALLS: int = Field(default=2, ge=1, le=100)
@@ -122,7 +129,7 @@ class Settings(BaseSettings):
     def _lower_backend(cls, value: object) -> object:
         return value.strip().lower() if isinstance(value, str) else value
 
-    @field_validator("TWILIO_NUMBER", "TRUSTED_PERSON_NUMBER")
+    @field_validator("TWILIO_NUMBER", "TRUSTED_PERSON_NUMBER", "SENIOR_NUMBER")
     @classmethod
     def _check_e164(cls, value: str) -> str:
         value = value.strip().replace(" ", "")

@@ -11,17 +11,21 @@
 * `GET /dev/samples`, `GET /dev/samples/{name}.ulaw`: sample caller clips rendered by
   `scripts/make_samples.sh` into `DATA_DIR/samples/` (8 kHz mu-law), streamed by /dev/caller
   instead of the microphone.
+* `WS /dev/events`: live call events for the jury / operator console (schema in
+  `app/events.py`); `GET /dev/alerts`: the last 50 alert summaries (RAM only).
 
 Never enable on a public deployment: `POST /dev/calls` bypasses webhook authentication.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import re
 import secrets
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -101,10 +105,14 @@ async def create_dev_call(body: DevCallRequest, request: Request) -> JSONRespons
     call_id = "CA" + secrets.token_hex(16)
     result = admit_call(services, call_id, body.caller, lang)
     if result.outcome is not AdmitOutcome.ADMITTED or result.token is None:
+        # Fail-open: a real call would be connected to the senior unprotected; the dev path
+        # has no phone to connect to, so it reports what the caller would hear.
+        services.events.action(call_id, "fail_open", f"{result.outcome.value}: dev caller")
         return JSONResponse(
             {
                 "error": "protection_unavailable",
                 "reason": result.outcome.value,
+                "failOpen": True,
                 "message": PROTECTION_UNAVAILABLE[lang],
             },
             status_code=503,
@@ -121,6 +129,46 @@ async def create_dev_call(body: DevCallRequest, request: Request) -> JSONRespons
         },
         headers=NO_STORE,
     )
+
+
+EVENT_SEND_TIMEOUT = 5.0
+
+
+@router.get("/alerts")
+async def list_alerts(request: Request) -> JSONResponse:
+    return JSONResponse({"alerts": get_services(request).events.alert_list()}, headers=NO_STORE)
+
+
+@router.websocket("/events")
+async def events_stream(ws: WebSocket) -> None:
+    """Server -> page only. A page that cannot keep up loses its oldest events (bounded queue
+    in the bus); one that stops reading for EVENT_SEND_TIMEOUT s is disconnected."""
+    bus = get_services(ws).events
+    await ws.accept()
+    sub = bus.subscribe()
+
+    async def drain_incoming() -> None:
+        while (await ws.receive())["type"] != "websocket.disconnect":
+            pass
+
+    reader = asyncio.create_task(drain_incoming())
+    try:
+        while not reader.done():
+            getter = asyncio.ensure_future(sub.get())
+            done, _ = await asyncio.wait({getter, reader}, return_when=asyncio.FIRST_COMPLETED)
+            if getter not in done:
+                getter.cancel()
+                break
+            await asyncio.wait_for(ws.send_json(getter.result()), EVENT_SEND_TIMEOUT)
+    except Exception:  # noqa: BLE001, S110 - page closed or too slow: just stop
+        pass
+    finally:
+        sub.close()
+        reader.cancel()
+        with contextlib.suppress(BaseException):
+            await reader
+        with contextlib.suppress(Exception):
+            await ws.close()
 
 
 def mount_dev_tools(app: FastAPI) -> None:

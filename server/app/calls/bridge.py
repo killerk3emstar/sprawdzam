@@ -15,7 +15,7 @@ import asyncio
 import contextlib
 import hmac
 import logging
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -36,11 +36,14 @@ from app.calls.sender import SafeSender
 from app.calls.voice_prompts import PromptLibrary
 from app.config import Lang
 from app.logging_setup import log_event
+from app.prompts import VOICE_PROMPTS
 from app.relay import protocol
 from app.relay.protocol import EndReason
+from app.relay.trusted_alert import compose_alert_text
 from app.telephony.provider import TelephonyProvider
 
 if TYPE_CHECKING:
+    from app.events import EventBus
     from app.relay.hub import AppHub
     from app.risk.engine import RiskAssessment
 
@@ -71,6 +74,7 @@ class CallBridge:
         verify_seconds: float = 20.0,
         family_password: str = "",
         prompts: PromptLibrary | None = None,
+        events: EventBus | None = None,
     ) -> None:
         self.call_id = call_id
         self.stream_id = stream_id
@@ -84,6 +88,12 @@ class CallBridge:
         self.verify_seconds = verify_seconds
         self._family_password = family_password
         self.prompts = prompts
+        self.events = events
+        self.last_assessment: RiskAssessment | None = None
+        # Senior's microphone audio for speech-to-text (set by the stream handler).
+        self.senior_audio_sink: Callable[[bytes], None] | None = None
+        # Text of every voice prompt played to the senior (echo guard reference).
+        self.played_text_sink: Callable[[str], None] | None = None
 
         self.state = CallState.RINGING
         self.ended = asyncio.Event()
@@ -108,6 +118,10 @@ class CallBridge:
 
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
+        if self.events is not None:
+            self.events.call_started(
+                self.call_id, self.caller_display, self.lang, analysed=not self.trusted
+            )
         token = self.hub.register(self)
         delivered = await self.hub.broadcast(
             protocol.incoming_call(
@@ -162,6 +176,12 @@ class CallBridge:
         self._app_framer.clear()
         self._phone_framer.clear()
         self._dtmf = ""
+        if self.events is not None:
+            if reason is EndReason.SCAM_BLOCKED:
+                self.events.action(self.call_id, "hangup", "call ended by the protection service")
+            self.events.call_ended(self.call_id, reason.value)
+        if reason is EndReason.SCAM_BLOCKED:
+            await self._alert_trusted_person()
         log_event(
             logger,
             logging.INFO,
@@ -171,6 +191,26 @@ class CallBridge:
             verified=self.verified,
             **self.stats,
         )
+
+    async def _alert_trusted_person(self) -> None:
+        """Ask the senior's phone to text the trusted person (the hub sends it once)."""
+        assessment = self.last_assessment
+        scam_type = assessment.scam_type.value if assessment else "none"
+        reasons = [name for name, on in assessment.categories.items() if on] if assessment else []
+        text = compose_alert_text(scam_type, reasons, self.lang)
+        try:
+            await self.hub.send_trusted_alert(
+                self.call_id,
+                protocol.alert_trusted(self.call_id, scam_type, reasons, self.lang, text),
+            )
+        except Exception as exc:  # noqa: BLE001 - never break the call teardown
+            log_event(
+                logger,
+                logging.ERROR,
+                "trusted_alert_failed",
+                call_id=self.call_id,
+                error_type=type(exc).__name__,
+            )
 
     async def app_detached(self) -> None:
         if self.state is not CallState.ENDED:
@@ -219,9 +259,14 @@ class CallBridge:
 
     async def on_app_audio(self, data: bytes) -> bool:
         """Senior's microphone (PCM16 LE 16 kHz) towards the caller. False if dropped."""
-        if self.state is not CallState.ACTIVE or self._caller_prompt.locked():
+        if self.state is not CallState.ACTIVE:
             return False
         if not data or len(data) > protocol.MAX_APP_AUDIO_FRAME_BYTES or len(data) % 2:
+            return False
+        if self.senior_audio_sink is not None:
+            # Analysed even while a prompt plays to the caller (the senior may still talk).
+            self.senior_audio_sink(data)
+        if self._caller_prompt.locked():
             return False
         audio8k = self._phone_resampler.process(pcm16le_to_float32(data))
         for frame in self._phone_framer.push(mulaw_encode(audio8k)):
@@ -262,6 +307,9 @@ class CallBridge:
                 self._to_app.get_nowait()
             app = self.app
             for name in names:
+                text = VOICE_PROMPTS.get(name, {}).get(self.lang)
+                if text and self.played_text_sink is not None:
+                    self.played_text_sink(text)
                 await self._paced(self._app_prompt_frames(name), app.send_bytes)
 
     async def play_to_caller(self, name: str) -> None:
@@ -282,6 +330,8 @@ class CallBridge:
 
     async def play_warning(self) -> None:
         """Spoken warning (or beeps) for the senior, in the background."""
+        if self.events is not None:
+            self.events.action(self.call_id, "warn", "spoken warning to the senior")
         if self.app is not None and self.state is CallState.ACTIVE:
             self._spawn(self.play_to_app("warning"))
 
@@ -315,7 +365,20 @@ class CallBridge:
             await self.app.send_json(message)
 
     async def send_risk(self, assessment: RiskAssessment) -> None:
-        await self.send_event(protocol.risk_event(assessment))
+        self.last_assessment = assessment
+        message = protocol.risk_event(assessment)
+        if self.events is not None:
+            self.events.risk(
+                self.call_id,
+                score=message["score"],  # type: ignore[arg-type]
+                model_score=None if assessment.model is None else round(assessment.model.risk),
+                rules_score=assessment.rules.score,
+                level=message["level"],  # type: ignore[arg-type]
+                scam_type=assessment.scam_type.value,
+                reasons=message["reasons"],  # type: ignore[arg-type]
+                source=assessment.source,
+            )
+        await self.send_event(message)
 
     def on_dtmf(self, digits: str) -> None:
         """Keypad digits from the caller (provider) or the senior (app). RAM only, not logged."""
@@ -333,7 +396,11 @@ class CallBridge:
         count from the start of the prompt; the window closes `verify_seconds` after it.
         False on timeout, call end, or when no password is configured (then no prompt)."""
         await self.send_event(protocol.verify_password())
+        if self.events is not None:
+            self.events.action(self.call_id, "verify_password", "family password requested")
         if not self._family_password or self.state is CallState.ENDED:
+            if self.events is not None:
+                self.events.action(self.call_id, "password_failed", "no family password set")
             return False
         self._dtmf = ""
         future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
@@ -348,6 +415,12 @@ class CallBridge:
         finally:
             self._verify_future = None
         self.verified = future.done() and future.result()
+        if self.events is not None:
+            self.events.action(
+                self.call_id,
+                "password_ok" if self.verified else "password_failed",
+                "correct family password" if self.verified else "no correct password in time",
+            )
         log_event(
             logger,
             logging.INFO,

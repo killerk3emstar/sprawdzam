@@ -3,8 +3,12 @@
 Scoring (team decision, see the model bench):
 * model score = 100 * (1 - P(low)) of basal's `risk` question; combined = max(model, rules);
 * warn when the combined score is >= RISK_WARN for two readings in a row;
-* verify the family password (then hang up) when it is >= RISK_HANGUP for two readings in a
-  row AND (the model's cached `secrecy` >= SECRECY_HANGUP_MIN OR a keyword-rule hit).
+* verify the family password (then hang up) only when the MODEL's own score is >= RISK_HANGUP
+  for two readings in a row AND (the model's cached `secrecy` >= SECRECY_HANGUP_MIN OR a
+  keyword-rule hit). The keyword rules do not understand negation ("a bank never asks for
+  BLIK"), so on their own they may warn but never hang up: when the model is unavailable
+  (source "rules") the engine reaches at most WARN, and a reading without a model answer
+  breaks the model's hang-up streak.
 
 Two-tier model questions: every evaluation asks only `risk` + `scam_type`; the first
 evaluation after a reading at or above the warn threshold asks all six questions once and
@@ -177,6 +181,8 @@ class CallRiskMonitor:
         self.lang = lang
         self.handler = handler
         self.smoother = ScoreSmoother(engine.smoothing_window, engine.confirmations)
+        # The model's own readings (0 when it did not answer): only these can reach hang-up.
+        self.model_smoother = ScoreSmoother(engine.smoothing_window, engine.confirmations)
         self.highest = Action.NONE
         self.signals: dict[str, float] = {}
         self._full_attempts = 0
@@ -202,7 +208,7 @@ class CallRiskMonitor:
     def _level(self, rule_hit: bool) -> Action:
         engine = self.engine
         secrecy = self.signals.get("secrecy", 0.0)
-        if self.smoother.sustained(engine.hangup_threshold) and (
+        if self.model_smoother.sustained(engine.hangup_threshold) and (
             secrecy >= engine.secrecy_hangup_min or rule_hit
         ):
             return Action.VERIFY_THEN_HANGUP
@@ -234,10 +240,11 @@ class CallRiskMonitor:
         raw = combine_scores(rules, model)
         self._last_raw = raw
         smoothed = self.smoother.update(raw)
+        self.model_smoother.update(0.0 if model is None else model.risk)
         rule_hit = self._rule_hit(rules)
         level = self._level(rule_hit)
         self._gate_blocked = (
-            self.smoother.sustained(self.engine.hangup_threshold)
+            self.model_smoother.sustained(self.engine.hangup_threshold)
             and level is not Action.VERIFY_THEN_HANGUP
         )
         action = Action.NONE

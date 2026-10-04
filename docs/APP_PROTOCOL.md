@@ -1,6 +1,7 @@
 # App protocol v0 (backend ⇄ senior app)
 
-Status: **v0** (+ `settings`, `settings_ack`, `incoming_call.trusted`), implemented by the
+Status: **v0** (+ `settings`, `settings_ack`, `incoming_call.trusted`, trusted-person alert
+`alert_trusted` / `alert_trusted_result` in section 3), implemented by the
 backend in `server/app/relay/`. The senior app (React Native,
 HarmonyOS + Android) and the browser stand-in `/dev/senior` implement the client side.
 Changes to this document must be agreed by both sides.
@@ -127,7 +128,9 @@ to 128 KiB.
 - Backend → app: the caller's voice (only after `accept`) and backend sounds such as the
   warning tone. Play it as it arrives with a small jitter buffer (40–100 ms).
 - App → backend: the senior's microphone, only after `accept`. Use the platform's voice /
-  echo-cancelling capture mode. The backend converts it to μ-law 8 kHz for the phone network.
+  echo-cancelling capture mode. The backend converts it to μ-law 8 kHz for the phone network
+  and also transcribes it (speaker "senior") as context for the risk model; utterances that
+  repeat what the phone's speaker just played (caller or voice prompt) are dropped as echo.
 
 ### Backend → app (JSON)
 
@@ -180,17 +183,55 @@ Keypad input (`0-9`, `*`, `#`, 1–32 characters) used for the family-password c
 If the call channel drops during a call, the backend ends the call (`error`). There is no
 resume in v0.
 
-## 3. Failure behaviour (fail-open for v0)
+## 3. Trusted-person alert (v0 extension)
 
-- **No app connected** (no open control channel) when a call arrives: the caller hears
-  "protection temporarily unavailable" (PL/EN) and the call ends. The same happens when all
-  call slots are busy. Planned later: forward the call to the senior's phone instead.
+After a call ends with `scam_blocked`, the backend asks the senior's phone to text the
+trusted person, on the **control channel** (the call channel is already closed):
+
+```json
+{"type": "alert_trusted", "callId": "CA9f…", "scamType": "police", "reasons": ["authority", "money", "secrecy"], "lang": "pl", "text": "Sprawdzam: babcia mogla rozmawiac z oszustem (falszywy policjant, prosba o gotowke). Zadzwon do niej."}
+```
+
+- `text` is composed by the backend and should be sent **as is** as one SMS to the trusted
+  person from the app's settings: plain ASCII (no Polish diacritics, so it stays one GSM-7
+  segment), no links, under 160 characters, PL or EN by `lang`. It names the scam pattern
+  (from `scamType`) and the main warning sign (from `reasons`), or is generic.
+  `scamType` / `reasons` have the same values as in `risk` and are for display only.
+- **At most one `alert_trusted` per `callId`**, guaranteed by the backend, also across
+  reconnects; the app should still ignore a repeated `callId`.
+- If no control channel is open when the call ends, the backend keeps the alert for
+  **2 minutes** and sends it right after the next control connection opens (after
+  `protection_status`). After that it is dropped.
+- Every connected control channel receives it (v0: one senior device; the browser stand-in
+  `/dev/senior` cannot send SMS).
+
+The app answers on the control channel:
+
+```json
+{"type": "alert_trusted_result", "callId": "CA9f…", "sent": true}
+{"type": "alert_trusted_result", "callId": "CA9f…", "sent": false, "error": "no_permission"}
+```
+
+`error` is `"no_permission"` (SMS permission denied), `"no_number"` (no trusted person set)
+or `"send_failed"`. Only the first result per alerted `callId` counts; results for unknown
+calls are ignored. The backend shows the outcome on the operator console (`sms_sent` /
+`sms_failed`) and logs it without numbers or text.
+
+## 4. Failure behaviour (fail-open)
+
+- **No app connected** (no open control channel) when a call arrives, or all call slots are
+  busy: the call **fails open**. With `SENIOR_NUMBER` configured (on the outbound allowlist,
+  live mode) the caller hears "protection temporarily unavailable, connecting without
+  protection" and is connected straight to the senior's own phone (Twilio `<Dial>`). Without
+  that route (not configured, or dry-run, as in the demo) the caller hears a neutral
+  "protection temporarily unavailable" and the call ends. Either way a `fail_open` event is
+  published on the operator console.
 - App disconnects between the webhook and the media stream start: the call ends.
 - The app shows "protection unavailable" whenever its control channel is not open.
 - Speech-to-text or the decision model failing does not affect the call: audio keeps flowing,
   risk is scored by the keyword rules only, or not at all.
 
-## 4. Example session
+## 5. Example session
 
 ```
 app → GET wss://host/app/control?device_token=…           (open)
@@ -209,9 +250,11 @@ be  → {"type":"risk","score":93,"level":"high","scamType":"police","reasons":[
 be  → {"type":"verify_password"}
       … 20 s without the correct password …
 be  → {"type":"call_ended","reason":"scam_blocked"}       (socket closed, 1000)
+be  → {"type":"alert_trusted","callId":"CA9f…","scamType":"police",…,"text":"Sprawdzam: …"}   (control)
+app → {"type":"alert_trusted_result","callId":"CA9f…","sent":true}                          (control)
 ```
 
-## 5. Security notes
+## 6. Security notes
 
 - Tokens travel in the query string because WebSocket clients cannot set headers everywhere.
   The backend redacts `token` / `device_token` values from its access logs; always use `wss://`.

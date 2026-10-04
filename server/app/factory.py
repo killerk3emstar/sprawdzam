@@ -15,6 +15,7 @@ from app.calls.stream import media_stream
 from app.calls.voice_prompts import PromptLibrary
 from app.calls.webhook import incoming_call
 from app.config import Settings, get_settings
+from app.events import EventBus
 from app.health import router as health_router
 from app.logging_setup import configure_logging, log_event
 from app.relay.hub import AppHub
@@ -170,7 +171,9 @@ def create_app(
         admission=CallAdmission(settings.MAX_CONCURRENT_CALLS),
         voice_rate_limiter=SlidingWindowRateLimiter(settings.MAX_INCOMING_CALLS_PER_MINUTE),
         decision_backend_name=getattr(decision, "name", None) if decision else None,
+        events=EventBus(settings.RISK_WARN, settings.RISK_HANGUP),
     )
+    services.hub.events = services.events
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

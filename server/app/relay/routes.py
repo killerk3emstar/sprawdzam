@@ -44,6 +44,7 @@ async def control_channel(ws: WebSocket) -> None:
     log_event(logger, logging.INFO, "app_control_connected", connections=hub.control_count)
     try:
         await sender.send_json(protocol.protection_status(True))
+        await hub.deliver_pending_alerts(sender)
         while True:
             try:
                 raw = await asyncio.wait_for(ws.receive(), protocol.CONTROL_IDLE_TIMEOUT_SECONDS)
@@ -65,6 +66,8 @@ async def control_channel(ws: WebSocket) -> None:
                 continue
             if isinstance(message, protocol.Ping):
                 await sender.send_json(protocol.pong())
+            elif isinstance(message, protocol.AlertTrustedResult):
+                hub.on_alert_result(message.callId, message.sent, message.error)
             elif isinstance(message, protocol.SettingsMessage):
                 try:
                     settings = DeviceSettings.from_message(message)

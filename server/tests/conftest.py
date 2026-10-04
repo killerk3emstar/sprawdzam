@@ -102,6 +102,22 @@ class FakeDecision:
         return self.result
 
 
+# Decision-model answer for a clear scam: since only the model can trigger the hang-up, every
+# integration test that expects `scam_blocked` wires `FakeDecision(SCAM_DECISION)`.
+SCAM_DECISION = {
+    "risk": 95.0,
+    "scam_type": "police",
+    "money": 0.9,
+    "secrecy": 0.95,
+    "authority": 0.9,
+    "urgency": 0.9,
+}
+
+
+def scam_model() -> FakeDecision:
+    return FakeDecision(SCAM_DECISION)
+
+
 class FakeControl:
     """Stands in for an open senior-app control channel; records what the hub sends."""
 

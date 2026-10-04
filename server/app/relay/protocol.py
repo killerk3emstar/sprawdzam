@@ -91,6 +91,20 @@ def call_ended(reason: EndReason) -> dict[str, object]:
     return {"type": "call_ended", "reason": reason.value}
 
 
+def alert_trusted(
+    call_id: str, scam_type: str, reasons: list[str], lang: Lang, text: str
+) -> dict[str, object]:
+    """Control channel: ask the senior's phone to text the trusted person."""
+    return {
+        "type": "alert_trusted",
+        "callId": call_id,
+        "scamType": scam_type,
+        "reasons": list(reasons),
+        "lang": lang,
+        "text": text,
+    }
+
+
 # ---------------------------------------------------------------------- app -> backend
 class _AppMsg(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
@@ -130,9 +144,21 @@ class SettingsMessage(_AppMsg):
     )
 
 
-AppMessage = Annotated[Ping | Accept | Hangup | Dtmf | SettingsMessage, Field(discriminator="type")]
+class AlertTrustedResult(_AppMsg):
+    """Control channel: the app's answer to `alert_trusted`."""
+
+    type: Literal["alert_trusted_result"]
+    callId: Annotated[str, StringConstraints(pattern=CALL_ID_PATTERN)]
+    sent: bool
+    error: Annotated[str, StringConstraints(max_length=40)] | None = None
+
+
+AppMessage = Annotated[
+    Ping | Accept | Hangup | Dtmf | SettingsMessage | AlertTrustedResult,
+    Field(discriminator="type"),
+]
 _adapter: TypeAdapter[AppMessage] = TypeAdapter(AppMessage)
-_KNOWN = {"ping", "accept", "hangup", "dtmf", "settings"}
+_KNOWN = {"ping", "accept", "hangup", "dtmf", "settings", "alert_trusted_result"}
 
 
 class BadAppMessage(ValueError):

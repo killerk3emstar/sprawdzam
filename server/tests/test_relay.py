@@ -20,6 +20,7 @@ from tests.conftest import (
     media,
     post_voice,
     receive_json,
+    scam_model,
     speech_mulaw_frames,
     start_message,
     stop_message,
@@ -240,7 +241,7 @@ def test_app_channel_drop_ends_call(make_client, caplog):
 
 # ---------------------------------------------------------------------- risk events
 def test_risk_events_and_scam_block_reach_the_app(make_client):
-    client = make_client(stt=FakeSTT([SCAM_TEXT]))
+    client = make_client(stt=FakeSTT([SCAM_TEXT]), decision_backend=scam_model())
     with client.websocket_connect("/twilio/stream") as stream:
         incoming = start_call(client, stream)
         with client.websocket_connect(call_url(incoming)) as app_ws:
@@ -266,7 +267,7 @@ def test_risk_events_and_scam_block_reach_the_app(make_client):
 def test_family_password_lets_the_call_continue(make_client, make_settings, source, caplog):
     caplog.set_level(logging.INFO)
     settings = make_settings(FAMILY_PASSWORD="2468", VERIFY_PASSWORD_SECONDS=5)
-    client = make_client(settings, stt=FakeSTT([SCAM_TEXT]))
+    client = make_client(settings, stt=FakeSTT([SCAM_TEXT]), decision_backend=scam_model())
     with client.websocket_connect("/twilio/stream") as stream:
         incoming = start_call(client, stream)
         with client.websocket_connect(call_url(incoming)) as app_ws:
@@ -299,7 +300,7 @@ def test_family_password_lets_the_call_continue(make_client, make_settings, sour
 
 def test_wrong_password_blocks(make_client, make_settings):
     settings = make_settings(FAMILY_PASSWORD="2468", VERIFY_PASSWORD_SECONDS=0.5)
-    client = make_client(settings, stt=FakeSTT([SCAM_TEXT]))
+    client = make_client(settings, stt=FakeSTT([SCAM_TEXT]), decision_backend=scam_model())
     with client.websocket_connect("/twilio/stream") as stream:
         incoming = start_call(client, stream)
         with client.websocket_connect(call_url(incoming)) as app_ws:

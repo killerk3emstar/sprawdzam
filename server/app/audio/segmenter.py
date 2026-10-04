@@ -56,6 +56,11 @@ class PauseSegmenter:
         self._speech_frames = 0
         self._silence_run = 0
 
+    @property
+    def in_segment(self) -> bool:
+        """True while an utterance has started and not been emitted yet."""
+        return bool(self._segment)
+
     def push(self, samples: np.ndarray) -> list[np.ndarray]:
         """Add audio (float32 mono at `rate`); returns the segments completed by it."""
         if samples.size == 0:

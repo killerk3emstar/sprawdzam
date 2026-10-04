@@ -17,7 +17,7 @@ from app.telephony.guard import (
 from app.telephony.numbers import mask_number, parse_number_list
 from app.telephony.responder import IncidentResponder, alert_sms
 from app.transcript import TranscriptWindow
-from tests.conftest import RecordingActions
+from tests.conftest import RecordingActions, scam_model
 
 pytestmark = pytest.mark.anyio
 
@@ -216,7 +216,7 @@ async def test_responder_full_incident_through_guard(tmp_path):
     inner = RecordingActions()
     guard = make_guard(tmp_path, inner)
     call = FakeCall()
-    engine = RiskEngine(warn_threshold=50, hangup_threshold=90)
+    engine = RiskEngine(warn_threshold=50, hangup_threshold=90, decision_backend=scam_model())
     monitor = engine.start_call("CA1", "pl", IncidentResponder(call, guard, "pl", TRUSTED))
     transcript = TranscriptWindow()
     transcript.add("caller", "Jestem z CBŚ, proszę przekazać gotówkę kurierowi, nikomu nie mów.")

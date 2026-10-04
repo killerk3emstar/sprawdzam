@@ -15,7 +15,7 @@ from twilio.twiml.voice_response import Connect, VoiceResponse
 
 from app.config import Lang, Settings
 from app.logging_setup import log_event
-from app.prompts import PROTECTION_NOTICE, PROTECTION_UNAVAILABLE
+from app.prompts import PROTECTION_NOTICE, PROTECTION_UNAVAILABLE, PROTECTION_UNAVAILABLE_NO_ROUTE
 from app.telephony.provider import (
     IncomingCall,
     InvalidWebhook,
@@ -121,11 +121,16 @@ class TwilioProvider:
         response.append(connect)
         return str(response)
 
-    def unavailable_markup(self, lang: Lang) -> str:
+    def unavailable_markup(self, lang: Lang, dial_to: str | None = None) -> str:
         voice = VOICES[lang]
         response = VoiceResponse()
-        response.say(PROTECTION_UNAVAILABLE[lang], voice=voice.voice, language=voice.language)
-        response.hangup()
+        if dial_to:
+            response.say(PROTECTION_UNAVAILABLE[lang], voice=voice.voice, language=voice.language)
+            response.dial(dial_to)
+        else:
+            text = PROTECTION_UNAVAILABLE_NO_ROUTE[lang]
+            response.say(text, voice=voice.voice, language=voice.language)
+            response.hangup()
         return str(response)
 
     # ------------------------------------------------------------------ media stream

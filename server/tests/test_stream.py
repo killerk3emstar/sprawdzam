@@ -15,6 +15,7 @@ from tests.conftest import (
     drain_until_close,
     media,
     post_voice,
+    scam_model,
     speech_mulaw_frames,
     start_message,
     stop_message,
@@ -28,7 +29,7 @@ def test_full_stream_flow_blocks_scam_with_malformed_messages(make_client, caplo
     caplog.set_level(logging.INFO)
     stt = FakeSTT([SCAM_TEXT])
     inner = RecordingActions()
-    client = make_client(stt=stt, inner_actions=inner)
+    client = make_client(stt=stt, inner_actions=inner, decision_backend=scam_model())
     services = client.app.state.services
     token = admit(client)
     frames = speech_mulaw_frames((3.5, 3.5))  # two utterances -> two STT segments

@@ -9,6 +9,7 @@ from starlette.requests import HTTPConnection
 
 from app.calls.voice_prompts import PromptLibrary
 from app.config import Settings
+from app.events import EventBus
 from app.relay.hub import AppHub
 from app.risk.engine import RiskEngine
 from app.session import CallSession
@@ -31,6 +32,7 @@ class Services:
     actions: GuardedCallActions
     admission: CallAdmission
     voice_rate_limiter: SlidingWindowRateLimiter
+    events: EventBus = field(default_factory=EventBus)
     decision_backend_name: str | None = None  # active decision backend, None = rules only
     sessions: dict[str, CallSession] = field(default_factory=dict)
 

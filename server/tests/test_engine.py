@@ -3,7 +3,7 @@ import logging
 import httpx
 import pytest
 
-from app.risk.decision import DecisionBackendError, MalformedDecision
+from app.risk.decision import SIGNALS, DecisionBackendError, MalformedDecision
 from app.risk.engine import RiskEngine
 from app.risk.models import Action, ScamType
 from app.transcript import TranscriptWindow
@@ -199,13 +199,61 @@ async def test_hangup_with_model_secrecy():
     assert handler.actions == [Action.VERIFY_THEN_HANGUP]
 
 
-async def test_hangup_with_rule_hit_when_model_is_down():
+async def test_rules_alone_warn_but_never_hang_up_when_model_is_down():
     handler = RecordingHandler()
     monitor = engine_with(FakeDecision(exc=httpx.ConnectError("down"))).start_call(
         "CA1", "pl", handler
     )
-    results = [await monitor.evaluate(window(SCAM_PL)) for _ in range(3)]
+    results = [await monitor.evaluate(window(SCAM_PL)) for _ in range(5)]
+    assert all(r.source == "rules" for r in results)
     assert results[0].level is Action.NONE  # one reading is never enough
+    assert results[1].raw_score >= 90 and results[1].rule_hit
+    assert results[1].action is Action.WARN
+    assert handler.actions == [Action.WARN]  # never escalates to the hang-up
+
+
+async def test_rules_only_engine_never_hangs_up():
+    handler = RecordingHandler()
+    monitor = engine_with().start_call("CA1", "pl", handler)
+    for _ in range(5):
+        result = await monitor.evaluate(window(SCAM_PL))
+    assert result.level is Action.WARN
+    assert handler.actions == [Action.WARN]
+
+
+async def test_rules_high_but_model_low_only_warns():
+    """Negation the rules cannot read: the model says it is fine, the rules score high."""
+    handler = RecordingHandler()
+    backend = FakeDecision({"risk": 20.0, "scam_type": "none", **{k: 0.1 for k in SIGNALS}})
+    monitor = engine_with(backend).start_call("CA1", "pl", handler)
+    for _ in range(5):
+        result = await monitor.evaluate(window(SCAM_PL))
+    assert result.raw_score >= 90 and result.rule_hit
+    assert handler.actions == [Action.WARN]
+
+
+async def test_model_drop_breaks_the_hangup_streak():
+    handler = RecordingHandler()
+    backend = FakeDecision(FULL)
+    monitor = engine_with(backend).start_call("CA1", "pl", handler)
+    await monitor.evaluate(window(SCAM_PL))  # model 95
+    backend.exc = httpx.ConnectError("down")
+    await monitor.evaluate(window(SCAM_PL))  # model down, rules 100
+    backend.exc = None
+    result = await monitor.evaluate(window(SCAM_PL))  # model 95 again, only one in a row
+    assert result.level is Action.WARN
+    result = await monitor.evaluate(window(SCAM_PL))
+    assert result.action is Action.VERIFY_THEN_HANGUP
+    assert handler.actions == [Action.WARN, Action.VERIFY_THEN_HANGUP]
+
+
+async def test_model_high_with_rule_hit_hangs_up():
+    handler = RecordingHandler()
+    # Quick answers only (no signals), so the gate is opened by the rule hit, not secrecy.
+    backend = FakeDecision({"risk": 95.0, "scam_type": "police"})
+    monitor = engine_with(backend).start_call("CA1", "pl", handler)
+    results = [await monitor.evaluate(window(SCAM_PL)) for _ in range(3)]
+    assert results[0].level is Action.NONE
     assert results[1].action is Action.VERIFY_THEN_HANGUP
     assert results[2].action is Action.NONE  # never repeated
     assert handler.actions == [Action.VERIFY_THEN_HANGUP]
@@ -236,7 +284,7 @@ async def test_failing_action_handler_does_not_break_evaluation(caplog):
     monitor = engine_with().start_call("CA1", "pl", RecordingHandler(fail=True))
     await monitor.evaluate(window(SCAM_PL))
     result = await monitor.evaluate(window(SCAM_PL))
-    assert result.action is Action.VERIFY_THEN_HANGUP
+    assert result.action is Action.WARN
     assert any("action_failed" in r.getMessage() for r in caplog.records)
 
 
