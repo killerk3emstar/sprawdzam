@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "microphone_reason",
+      "value": "Sprawdzam potrzebuje mikrofonu, żebyś mógł rozmawiać podczas chronionych połączeń."
+    },
+    {
+      "name": "module_desc",
+      "value": "Sprawdzam: ochrona przed oszustwami telefonicznymi"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Chronione połączenia i ostrzeżenia przed oszustwami"
+    }
+  ]
+}
