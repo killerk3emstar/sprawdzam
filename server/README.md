@@ -41,7 +41,7 @@ Configuration comes from environment variables or a `.env` file (the repository 
 first, then an optional `server/.env`). Copy `../.env.example` to `../.env`. Without
 `TWILIO_AUTH_TOKEN` all Twilio webhooks are refused (403); for local experiments only, set
 `ALLOW_UNSIGNED_WEBHOOKS=true`. Without `APP_DEVICE_TOKEN` the senior app cannot connect, so
-every call hears "protection temporarily unavailable".
+every call fails open ("protection temporarily unavailable", see Failure behaviour).
 
 ## 5-minute manual test in the browser (no phone, no Twilio account)
 
@@ -116,6 +116,7 @@ has not been built yet (no Docker daemon on the hackathon network).
 | `WS /app/control?device_token=…` | Senior app control channel (protocol v0). |
 | `WS /app/call/{callId}?token=…` | Senior app call channel: audio + risk events (protocol v0). |
 | `GET /dev/caller`, `GET /dev/senior`, `POST /dev/calls` | Browser test tools, only with `DEV_TOOLS=true`. |
+| `WS /dev/events`, `GET /dev/alerts` | Live call events for the jury / operator console and the last 50 alert summaries (RAM only), only with `DEV_TOOLS=true`. Schema below. |
 
 The app protocol is specified in [`docs/APP_PROTOCOL.md`](../docs/APP_PROTOCOL.md).
 
@@ -193,8 +194,38 @@ the caller hears ringback; after it, audio is bridged (app side PCM16 LE 16 kHz,
 frames; phone side μ-law 8 kHz). Every risk assessment becomes a `risk` event; the first warn
 adds a warning tone; high risk sends `verify_password` and, unless the family password
 arrives as DTMF in time, ends the call with `call_ended: scam_blocked` (closing the media
-stream ends the phone call; the guarded REST hang-up runs as a backup), then alerts the
-trusted person. No accept within `APP_ACCEPT_TIMEOUT_SECONDS` (30) → `timeout`.
+stream ends the phone call; the guarded REST hang-up runs as a backup), then asks the
+senior's phone to text the trusted person (`alert_trusted` on the control channel, once per
+call, queued 2 min if the app is offline; the app answers `alert_trusted_result`). The
+backend's own Twilio call/SMS to `TRUSTED_PERSON_NUMBER` still runs through the guard (dry-run
+in the demo). No accept within `APP_ACCEPT_TIMEOUT_SECONDS` (30) → `timeout`.
+
+The senior's microphone audio is also transcribed (speaker "senior", see below).
+
+## Operator console events (`WS /dev/events`)
+
+`app/events.py` is an in-process pub/sub. Publishing never blocks the call pipeline: every
+subscriber has a bounded queue (256) and loses its oldest events when it falls behind; a page
+that stops reading for 5 s is disconnected. Server → page JSON (fields are only ever added):
+
+```
+{"type":"hello","warn":50,"hangup":90,"alerts":[<alert>...]}                 on connect
+{"type":"call_started","callId","at","caller":"+48 *** *** 123","lang"}
+{"type":"transcript","callId","at","speaker":"caller"|"senior","text"}
+{"type":"risk","callId","at","score","modelScore","rulesScore","level":"none|warn|high",
+ "scamType","reasons":[...],"source":"model+rules"|"rules"}
+{"type":"action","callId","at","action","detail"}
+   action: warn | verify_password | password_ok | password_failed | hangup |
+           sms_requested | sms_sent | sms_failed | fail_open
+{"type":"call_ended","callId","at","reason","alert":<alert>|null}
+<alert> = {"callId","at","caller","scamType","maxScore","outcome":"warned|blocked|normal","actions":[...]}
+```
+
+`at` is ISO 8601 UTC with milliseconds. `score` is the smoothed combined score, `modelScore`
+is `null` when the model did not answer. `alert` is `null` for whitelisted calls and calls
+that never got a risk reading. Alerts never contain transcript text; transcript events exist
+only on the live stream (never stored or logged). `fail_open` and late `sms_*` actions may
+arrive for a call id without `call_started` / after `call_ended`.
 
 ## Security and privacy
 
@@ -218,7 +249,7 @@ trusted person. No accept within `APP_ACCEPT_TIMEOUT_SECONDS` (30) → `timeout`
 
 ## Speech-to-text and decision model
 
-Both models run natively on the Mac (see the model bench README on `feat/model-bench`:
+Both models run natively on the Mac (see `server/bench/README.md`:
 `server/bench/run-whisper.sh`, `server/bench/run-basal.sh`). Set in `.env`:
 `WHISPER_URL=http://127.0.0.1:8080`, `DECISION_BACKEND=basal`, `BASAL_URL=http://127.0.0.1:8000`
 (a backend in Docker uses `http://host.docker.internal:…`). At start-up the backend sends one
@@ -228,7 +259,17 @@ warm-up request to each (the first basal decision compiles kernels, ~2 s); `/hea
 - **Segmentation** (`app/audio/segmenter.py`): the caller's 16 kHz audio is cut at pauses
   (≥ `STT_PAUSE_SECONDS`, 0.2 s, energy VAD) into 3–8 s segments; short utterances go out after
   a 1 s pause; silence is never sent. Whisper's latency hardly depends on segment length and
-  2 s chunks hurt accuracy. Silero VAD is the planned upgrade for noisy lines.
+  2 s chunks hurt accuracy. Silero VAD is the planned upgrade for noisy lines. The senior's
+  microphone (from the app) has its own segmenter (`STT_SENIOR_MIN_SEGMENT_SECONDS`, 1.5 s;
+  `ANALYSE_SENIOR=false` turns it off).
+- **One STT worker per call** (`app/session.py`): Whisper is one shared server, so caller and
+  senior segments go through one sequential queue with the caller first. A senior segment
+  waits while the caller is mid-utterance (up to 8 s), is skipped when older than 12 s and
+  gets a 3 s timeout. Logs: `stt_latency` with `speaker` and `queue_wait_ms`.
+- **Echo guard** (`app/echo_guard.py`): the phone's speaker (caller voice, our voice prompts)
+  leaks into its microphone. A senior utterance similar to (difflib ratio ≥ 0.75), contained
+  in, or made of the words of a caller utterance / prompt from the 15 s before it was
+  captured is dropped (`echo_dropped`).
 - **Whisper client** (`app/stt/whisper.py`): `POST /inference` with a 16 kHz PCM16 WAV,
   `language` forced from the call, `verbose_json`, `temperature=0.0`. Segments with
   `no_speech_prob > 0.6` and known silence hallucinations ("KONIEC", "Napisy wykonane…",
@@ -236,7 +277,7 @@ warm-up request to each (the first basal decision compiles kernels, ~2 s); `/hea
   alone, ~2.2 s while basal is busy on the same GPU); errors skip the segment (`stt_failed`)
   and the call goes on.
 - **basal client** (`app/risk/basal.py`, schemas in `app/risk/schemas/`): state = the last
-  60 s of transcript with speaker tags (`Dzwoniący:` / `Caller:`; only the caller for now),
+  60 s of transcript with speaker tags (`Dzwoniący:` / `Caller:` and `Senior:`),
   PL or EN schema from the call language. Every new segment asks `risk` + `scam_type`
   (~1.1 s); the first evaluation after a reading ≥ `RISK_WARN` asks all six questions once
   (~2 s) and caches `money`/`secrecy`/`authority`/`urgency`. Model score =
@@ -285,7 +326,12 @@ APP_DEVICE_TOKEN=smoke-device-token-123456 uv run python scripts/smoke_call.py \
 The script plays the senior app (control + call channel, `accept`) and the caller (a WAV
 streamed in real time over `/twilio/stream`) and prints the timeline of `risk`,
 `verify_password` and `call_ended` events. Clips come from the model bench
-(`server/bench/stt/make_audio.sh`).
+(`server/bench/stt/make_audio.sh`). It also prints a summary of `/dev/events` (counts,
+speakers, actions, alert) and answers `alert_trusted` (expected once for a blocked call).
+`--echo-gain 0.7` loops the caller audio the app receives back as its microphone (echo
+test); `--senior-audio WAV --senior-at 30` plays a clip as the senior's speech. Run it against
+your own backend port (`--base http://127.0.0.1:<PORT>`), and keep `--tail-seconds` long
+enough to cover the 20 s password window.
 
 ## Telephony cost and safety guard
 
@@ -298,7 +344,7 @@ Anything that can spend provider money goes through `GuardedCallActions`
 | Allowlist | `OUTBOUND_ALLOWLIST=` (empty) | Comma-separated E.164 numbers. Any other destination, a malformed number or our own `TWILIO_NUMBER` (call loop) is refused and logged. |
 | Daily caps | `MAX_OUTBOUND_CALLS_PER_DAY=10`, `MAX_SMS_PER_DAY=20` | Counted per UTC day in `DATA_DIR/telephony_counters.json` (date and counts only). Reserved before the action runs; survives restarts. Unreadable counter file → outbound refused (fail closed for spending). |
 | Per-incident dedupe | always on | At most one REST hang-up, one trusted-person call and one SMS per incoming call, however many high readings arrive. |
-| Concurrency | `MAX_CONCURRENT_CALLS=2` | Pending + active calls. Extra webhook requests get TwiML `<Say>` "protection temporarily unavailable" (PL/EN) + `<Hangup/>`; streams without a slot/token are refused. |
+| Concurrency | `MAX_CONCURRENT_CALLS=2` | Pending + active calls. Extra webhook requests fail open (see Failure behaviour); streams without a slot/token are refused. |
 | Call duration | `MAX_CALL_SECONDS=600` | The stream closes itself after the limit. Closing the WebSocket ends `<Connect>`; there is no further TwiML verb, so the provider hangs up the call. |
 | Rate limit | `MAX_INCOMING_CALLS_PER_MINUTE=10` | In-memory sliding window on signed webhook requests (and `POST /dev/calls`) → HTTP 429. |
 
@@ -306,15 +352,21 @@ Order of checks for outbound actions: number format → own number → allowlist
 dry run → daily cap → execute. Dry-run actions do not count against the caps. The guard, the
 admission state and the app hub are per process: run a single uvicorn worker.
 
-`TRUSTED_PERSON_NUMBER` (E.164) is the person alerted on high risk; it must also be on the
-allowlist. Until the family panel exists this is the only trusted person.
+`TRUSTED_PERSON_NUMBER` (E.164) is the person the backend itself calls / texts on a blocked
+scam; it must also be on the allowlist (the app's `trustedPerson` takes precedence when
+allowlisted). In the demo the SMS is sent by the senior's phone instead (`alert_trusted`).
 
 ## Failure behaviour
 
 - No senior app connected (control channel closed) when a call arrives, or all call slots
-  busy: the caller hears "protection temporarily unavailable" and the call ends (v0; later:
-  forward to the senior's phone). The app shows "protection unavailable" while its control
-  channel is down.
+  busy: **fail-open**. With `SENIOR_NUMBER` set, on `OUTBOUND_ALLOWLIST` and
+  `TELEPHONY_DRY_RUN=false`, the caller hears "protection temporarily unavailable, connecting
+  without protection" (PL/EN) and Twilio `<Dial>`s the senior's own number. Without that
+  route (unset, not allowlisted, dry-run) the caller hears a neutral "protection temporarily
+  unavailable" and the call ends. Logged as `fail_open_route` (route, never the number) and
+  published as a `fail_open` console event; `POST /dev/calls` answers 503 with
+  `failOpen: true`. Implemented and unit-tested; the `<Dial>` path has not been tried with a
+  real call. The app shows "protection unavailable" while its control channel is down.
 - App call channel drops mid-call: the call ends (`error`).
 - STT failure or timeout: logged (`stt_failed`), audio keeps flowing, the session is marked
   degraded. Decision model failure: rules only.
@@ -325,8 +377,8 @@ allowlist. Until the family panel exists this is the only trusted person.
 ## Not done yet
 
 - Silero VAD instead of the energy rule; Clef-Flash client
-- Transcribing the senior's side (the app audio is bridged but not analysed)
 - Threshold tuning on `scenarios/` (the evaluation agent's results)
-- Per-senior language, family password and trusted person from the senior app (no family
-  web panel is planned; today they come from `.env`)
-- Dockerfile / docker compose
+- Family password from the senior app (language, trusted person and whitelist already come
+  from its `settings`; the password still comes from `.env`; no family web panel is planned)
+- Measuring the effect of the senior's transcript on false warnings with real calls
+- `/dev/events` is a dev route (DEV_TOOLS); a production operator console would need auth
