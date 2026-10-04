@@ -265,8 +265,13 @@ warm-up request to each (the first basal decision compiles kernels, ~2 s); `/hea
   (≥ `STT_PAUSE_SECONDS`, 0.2 s, energy VAD) into 3–8 s segments; short utterances go out after
   a 1 s pause; silence is never sent. Whisper's latency hardly depends on segment length and
   2 s chunks hurt accuracy. Silero VAD is the planned upgrade for noisy lines. The senior's
-  microphone (from the app) has its own segmenter (`STT_SENIOR_MIN_SEGMENT_SECONDS`, 1.5 s;
-  `ANALYSE_SENIOR=false` turns it off).
+  microphone (from the app) has its own segmenter, 1.5–5 s (`STT_SENIOR_MIN_SEGMENT_SECONDS`,
+  `STT_SENIOR_MAX_SEGMENT_SECONDS`; `ANALYSE_SENIOR=false` turns it off) with an adaptive
+  threshold: on a speakerphone with echo cancellation and AGC the level between words stayed
+  above the fixed -40 dBFS, so every senior segment ran to the 8 s maximum. The senior
+  threshold is the highest of -40 dBFS, 6 dB over the noise floor (quietest 20 ms frame of
+  the last 2 s) and 16 dB under the speaker's running speech level. `LOG_LEVEL=DEBUG` logs
+  every cut (`segment_cut`: reason, length, mean RMS, noise floor, speech level, threshold).
 - **One STT worker per call** (`app/session.py`): Whisper is one shared server, so caller and
   senior segments go through one sequential queue with the caller first. A senior segment
   waits while the caller is mid-utterance (up to 8 s), is skipped when older than 12 s and
@@ -274,7 +279,9 @@ warm-up request to each (the first basal decision compiles kernels, ~2 s); `/hea
 - **Echo guard** (`app/echo_guard.py`): the phone's speaker (caller voice, our voice prompts)
   leaks into its microphone. A senior utterance similar to (difflib ratio ≥ 0.75), contained
   in, or made of the words of a caller utterance / prompt from the 15 s before it was
-  captured is dropped (`echo_dropped`).
+  captured is dropped (`echo_dropped`). In a longer segment that mixes echo with the senior's
+  own words, runs of ≥ 3 words found in the same order in the recent caller text (caller
+  utterances concatenated) are removed and the rest is kept (`echo_trimmed`).
 - **Whisper client** (`app/stt/whisper.py`): `POST /inference` with a 16 kHz PCM16 WAV,
   `language` forced from the call, `verbose_json`, `temperature=0.0`. Segments with
   `no_speech_prob > 0.6` and known silence hallucinations ("KONIEC", "Napisy wykonane…",
@@ -335,7 +342,9 @@ streamed in real time over `/twilio/stream`) and prints the timeline of `risk`,
 (`server/bench/stt/make_audio.sh`). It also prints a summary of `/dev/events` (counts,
 speakers, actions, alert) and answers `alert_trusted` (expected once for a blocked call).
 `--echo-gain 0.7` loops the caller audio the app receives back as its microphone (echo
-test); `--senior-audio WAV --senior-at 30` plays a clip as the senior's speech. Run it against
+test); `--senior-audio WAV --senior-at 30` plays a clip as the senior's speech;
+`--senior-noise -45` adds a noise floor (dBFS). With any of the three the microphone is one
+continuous 20 ms stream mixing noise, echo and the clip, as on a phone. Run it against
 your own backend port (`--base http://127.0.0.1:<PORT>`), and keep `--tail-seconds` long
 enough to cover the password window (12 s) or the confirm countdown (8 s).
 

@@ -14,7 +14,10 @@ call_ended, and how much prompt audio the caller received. `--audio` also takes 
 * with `--senior-audio WAV` streams that clip as the senior's microphone, starting
   `--senior-at` seconds after the answer (real senior speech for the transcript);
 * with `--echo-gain G` plays the caller audio the app receives back into the call as the
-  senior's microphone at gain G (a speaker-to-mic leak), to exercise the echo guard.
+  senior's microphone at gain G (a speaker-to-mic leak), to exercise the echo guard;
+* with `--senior-noise DBFS` adds a constant noise floor (e.g. -45) to the microphone.
+When any of these is set the microphone is one continuous 20 ms stream (like a phone): noise
++ echo + the senior clip, mixed.
 Usage (from `server/`):
 
     APP_DEVICE_TOKEN=... uv run python scripts/smoke_call.py \\
@@ -181,15 +184,15 @@ async def run_call(args: argparse.Namespace, base: str, ws_base: str) -> dict:
                     "caller_clears": 0,
                 }
 
+                echo_buffer: list[np.ndarray] = []
+
                 async def app_events() -> None:
                     async for message in app:
                         if isinstance(message, bytes):
                             counters["app_audio_frames"] += 1
                             if args.echo_gain > 0 and not ended.is_set():
                                 pcm = np.frombuffer(message, dtype="<i2").astype(np.float32)
-                                leak = np.clip(pcm * args.echo_gain, -32768, 32767)
-                                with contextlib.suppress(websockets.ConnectionClosed):
-                                    await app.send(leak.astype("<i2").tobytes())
+                                echo_buffer.append(pcm * args.echo_gain)
                             continue
                         event = json.loads(message)
                         event["t"] = round(time.monotonic() - t0, 1)
@@ -232,18 +235,37 @@ async def run_call(args: argparse.Namespace, base: str, ws_base: str) -> dict:
                     await stream.send(json.dumps({"event": "stop", "streamSid": STREAM_SID}))
 
                 async def senior_side() -> None:
-                    if args.senior_audio is None:
+                    """The senior's microphone: one 20 ms frame of noise + echo + clip."""
+                    if not (args.senior_audio or args.echo_gain > 0 or args.senior_noise):
                         return
-                    mulaw = read_wav_as_mulaw(args.senior_audio)
-                    pcm8k = mulaw_decode(mulaw).astype(np.float32) / 32768
-                    pcm = (resample(pcm8k, 8000, 16000) * 32767).astype("<i2").tobytes()
-                    await asyncio.sleep(args.senior_at)
+                    clip = np.zeros(0, dtype=np.float32)
+                    if args.senior_audio is not None:
+                        mulaw = read_wav_as_mulaw(args.senior_audio)
+                        pcm8k = mulaw_decode(mulaw).astype(np.float32)
+                        clip = resample(pcm8k, 8000, 16000)
+                    clip_start = int(args.senior_at * 16000)
+                    noise_rms = 32768 * 10 ** (args.senior_noise / 20) if args.senior_noise else 0
+                    rng = np.random.default_rng(1)
+                    pending = np.zeros(0, dtype=np.float32)
                     start = time.monotonic()
-                    for i in range(0, len(pcm), 640):
-                        if ended.is_set():
-                            return
-                        await app.send(pcm[i : i + 640])
-                        delay = start + (i // 640 + 1) * 0.02 - time.monotonic()
+                    i = 0
+                    while not ended.is_set():
+                        frame = np.zeros(320, dtype=np.float32)
+                        if noise_rms:
+                            frame += noise_rms * rng.standard_normal(320).astype(np.float32)
+                        while echo_buffer and pending.size < 320:
+                            pending = np.concatenate([pending, echo_buffer.pop(0)])
+                        take = min(320, pending.size)
+                        frame[:take] += pending[:take]
+                        pending = pending[take:]
+                        offset = i * 320 - clip_start
+                        if 0 <= offset < clip.size:
+                            part = clip[offset : offset + 320]
+                            frame[: part.size] += part
+                        with contextlib.suppress(websockets.ConnectionClosed):
+                            await app.send(np.clip(frame, -32768, 32767).astype("<i2").tobytes())
+                        i += 1
+                        delay = start + i * 0.02 - time.monotonic()
                         if delay > 0:
                             await asyncio.sleep(delay)
 
@@ -310,6 +332,9 @@ def main() -> None:
     parser.add_argument("--echo-gain", type=float, default=0.0)
     parser.add_argument("--senior-audio", type=Path)
     parser.add_argument("--senior-at", type=float, default=5.0)
+    parser.add_argument(
+        "--senior-noise", type=float, help="microphone noise floor in dBFS, e.g. -45"
+    )
     parser.add_argument("--alert-wait", type=float, default=3.0)
     args = parser.parse_args()
     if not args.device_token:

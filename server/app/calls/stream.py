@@ -293,8 +293,9 @@ class StreamHandler:
             senior_segmenter=PauseSegmenter(
                 STT_RATE,
                 min_seconds=self.settings.STT_SENIOR_MIN_SEGMENT_SECONDS,
-                max_seconds=self.settings.STT_MAX_SEGMENT_SECONDS,
+                max_seconds=self.settings.STT_SENIOR_MAX_SEGMENT_SECONDS,
                 pause_seconds=self.settings.STT_PAUSE_SECONDS,
+                adaptive=True,
             ),
             stt_timeout=self.settings.STT_TIMEOUT_SECONDS,
             analyse=not trusted,

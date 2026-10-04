@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # The senior's microphone (from the app) is transcribed too, as context for the model.
     ANALYSE_SENIOR: bool = True
     STT_SENIOR_MIN_SEGMENT_SECONDS: float = Field(default=1.5, ge=0.5, le=10.0)
+    # Senior segments are cut shorter, and with an adaptive threshold (noise floor + drop
+    # relative to the speaker's level): a speakerphone with echo cancellation rarely gets
+    # quiet enough between words for the fixed caller threshold.
+    STT_SENIOR_MAX_SEGMENT_SECONDS: float = Field(default=5.0, ge=1.0, le=25.0)
 
     # Risk thresholds (0-100); warn and hang-up each need two readings in a row
     RISK_WARN: int = Field(default=50, ge=0, le=100)
@@ -177,6 +181,10 @@ class Settings(BaseSettings):
             raise ValueError("RISK_WARN must be lower than RISK_HANGUP")
         if self.STT_MIN_SEGMENT_SECONDS >= self.STT_MAX_SEGMENT_SECONDS:
             raise ValueError("STT_MIN_SEGMENT_SECONDS must be lower than STT_MAX_SEGMENT_SECONDS")
+        if self.STT_SENIOR_MIN_SEGMENT_SECONDS >= self.STT_SENIOR_MAX_SEGMENT_SECONDS:
+            raise ValueError(
+                "STT_SENIOR_MIN_SEGMENT_SECONDS must be lower than STT_SENIOR_MAX_SEGMENT_SECONDS"
+            )
         return self
 
     @property
