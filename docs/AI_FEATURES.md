@@ -42,8 +42,9 @@ caller's phone audio (Twilio Media Stream, μ-law 8 kHz, 20 ms frames)
        basal-1: questions `risk` (low/medium/high/critical) + `scam_type`  [client planned]
        keyword rules on the same window                                  [designed]
        score = max( 100·(1 − P(risk = low)), rules score )               [designed]
-  → smoothing: warn when the mean of the last 2 readings ≥ 50;
-               hang-up path when the last 2 readings are both ≥ 90        [designed]
+  → smoothing: warn when the last 2 combined readings are both ≥ 50;
+               hang-up path only when the last 2 MODEL readings are both ≥ 90
+               and (model secrecy ≥ 0.8 or a keyword-rule hit); rules alone never hang up  [designed]
   → actions (escalate only): warning tone + in-app warning → ask the caller for the
     family password (DTMF) → end the call → call/SMS the trusted person  [designed]
   → alert summary (time, score, scam type, which signals fired) for the family panel  [planned]
@@ -108,8 +109,9 @@ Findings that shaped the design:
   false-warning rate rises from 7% to 26% (a relative asking to borrow money looks like a scam without the
   senior's "same account as always?"). Transcribing the senior's side is the next precision improvement. **[verified
   on synthetic data; not yet implemented]**
-- Regex rules cannot read negation ("the bank never asks for BLIK codes" scores 90), so we recommend that rules
-  alone may warn but not hang up. **[recommendation, not yet implemented]**
+- Regex rules cannot read negation ("the bank never asks for BLIK codes" scores 90), so rules alone may warn but
+  never hang up: the hang-up path needs the model's own score ≥ 90 twice in a row. With the model down the
+  engine reaches at most a warning. **[designed, unit-tested in `server/tests/test_engine.py`]**
 - The 1.5B model is a fallback only: its scores are compressed (hang-up recall 0.40 at the same threshold).
 
 Turn-by-turn replay (64-call subset, the model reads the transcript after every turn, server smoothing): every
@@ -146,7 +148,8 @@ Details, per-family results, failure examples by id and the exact commands: `ser
 |---|---|---|
 | basal timeout (2–3 s), HTTP error, malformed or out-of-range answer | logged as `decision_fallback_to_rules`; that reading uses the rules only | designed (`server/app/risk/engine.py`, unit-tested on the server branch) |
 | Whisper error or timeout | logged (`stt_failed`), audio keeps flowing, session marked degraded; no new text, so no new escalation | designed |
-| one reading spikes (misheard word, model hiccup) | at most a warning; hang-up needs two consecutive readings ≥ 90 | designed (`smoothing.py`) |
+| one reading spikes (misheard word, model hiccup) | at most a warning; hang-up needs two consecutive model readings ≥ 90 | designed (`smoothing.py`) |
+| decision model down for the whole call | keyword rules only: the senior can be warned, but the call is never ended automatically | designed (`engine.py`) |
 | senior app not connected / all call slots busy | caller hears "protection temporarily unavailable"; app shows "protection unavailable" | designed (v0; forwarding the call to the senior's phone instead is planned) |
 | backend down entirely | Twilio fallback URL dials the senior directly (**fail-open**: calls still go through, unprotected) | planned (provider configuration) |
 | outbound alert actions | dry-run by default, allowlist, daily caps, one alert per incident | designed (`server/app/telephony/guard.py`) |

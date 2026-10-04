@@ -18,6 +18,7 @@ from tests.conftest import (
     media,
     post_voice,
     receive_json,
+    scam_model,
     speech_mulaw_frames,
     start_message,
     stop_message,
@@ -145,7 +146,9 @@ def test_choose_trusted_number(caplog):
 def test_app_trusted_person_needs_the_allowlist(make_client, make_settings, allowlist, expected):
     inner = RecordingActions()
     settings = make_settings(TELEPHONY_DRY_RUN=False, OUTBOUND_ALLOWLIST=allowlist)
-    client = make_client(settings, stt=FakeSTT([SCAM_TEXT]), inner_actions=inner)
+    client = make_client(
+        settings, stt=FakeSTT([SCAM_TEXT]), inner_actions=inner, decision_backend=scam_model()
+    )
     client.app.state.services.hub.apply_settings(
         DeviceSettings.from_message(SettingsMessage(**settings_message(lang="pl", whitelist=[])))
     )

@@ -10,6 +10,7 @@ from tests.conftest import (
     drain_until_close,
     media,
     receive_json,
+    scam_model,
     speech_mulaw_frames,
     start_message,
     wait_until,
@@ -58,7 +59,7 @@ def test_prompts_are_played_during_password_check(make_client, make_settings, tm
     blocked = write_prompt(prompt_dir, "blocked", "pl", 0.3, 900)
     write_prompt(prompt_dir, "warning", "pl", 0.3, 600)
     settings = make_settings(FAMILY_PASSWORD="2468", VERIFY_PASSWORD_SECONDS=0.3)
-    client = make_client(settings, stt=FakeSTT([SCAM_TEXT]))
+    client = make_client(settings, stt=FakeSTT([SCAM_TEXT]), decision_backend=scam_model())
     with client.websocket_connect("/twilio/stream") as stream:
         stream.send_json(start_message(admit(client)))
         assert wait_until(lambda: client.control.of_type("incoming_call"))

@@ -246,10 +246,13 @@ warm-up request to each (the first basal decision compiles kernels, ~2 s); `/hea
 - **Keyword rules** (`app/risk/rules.py`): Polish and English phrases on normalised text,
   including amounts written as digits (`30 tysięcy`, `200 zł`, `$500`) and six-digit codes
   near "kod"/"BLIK"/"code". Single words score low; combinations score high.
-- **Scoring** (team decision): combined = max(model, rules). Warn at ≥ `RISK_WARN` (50) for
-  two readings in a row. Family-password check, then hang-up, at ≥ `RISK_HANGUP` (90) for two
-  readings in a row **and** (cached secrecy ≥ `SECRECY_HANGUP_MIN` (0.8) or a keyword-rule
-  hit: a secrecy phrase or a rules score ≥ `RISK_WARN`). Actions only escalate.
+- **Scoring** (team decision): combined = max(model, rules). Warn when the combined score is
+  ≥ `RISK_WARN` (50) for two readings in a row. Family-password check, then hang-up, only when
+  the **model's own score** is ≥ `RISK_HANGUP` (90) for two readings in a row **and** (cached secrecy ≥ `SECRECY_HANGUP_MIN` (0.8) or a keyword-rule
+  hit: a secrecy phrase or a rules score ≥ `RISK_WARN`). Actions only escalate. The rules
+  cannot read negation ("a bank never asks for BLIK"), so on their own they can warn but never
+  hang up: with the model down (source `rules`) the engine reaches at most `warn`, and a
+  reading without a model answer breaks the model's two-reading streak.
   `DECISION_FULL_REFRESH_SECONDS` (default 10, 0 = once per call) re-asks the six questions
   at most that often while the hang-up gate is blocked only by an early, low secrecy answer.
 - Logs carry per-segment `stt_latency` and per-request `decision_latency` (ms), scores and
